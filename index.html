@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Backstab Arena (Multiplayer Full)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a202c; color: white; touch-action: none; font-family: 'Segoe UI', sans-serif; }
+        #gameCanvas { display: block; width: 100%; height: 100vh; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: background 0.3s; }
+        #serverStatus { position: absolute; top: 10px; left: 10px; padding: 5px 10px; background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 12px; z-index: 100; }
+        
+        /* 로비 및 화면 UI */
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #waitingScreen { background:rgba(0,0,0,0.8); display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 50; }
+        #lobbyScreen { background:#111827; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 40; }
+        #inGameUI { pointer-events:none; display:none; flex-direction:column; justify-content:space-between; padding: 1rem; z-index: 30; }
+        #messageOverlay { background:rgba(0,0,0,0.8); display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 90; }
+        #gachaScreen, #equipScreen { display:none; background:rgba(17, 24, 39, 0.95); flex-direction:column; align-items:center; justify-content:center; z-index: 60; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .cooldown-overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.6); }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <div id="serverStatus" class="pointer-events-auto text-red-400 border border-red-500">대기 중 (버튼을 눌러주세요)</div>
+
+    <canvas id="gameCanvas"></canvas>
+    <div id="visionOverlay"></div>
+
+    <!-- 로비 화면 -->
+    <div id="lobbyScreen" class="ui-layer pointer-events-auto fade-in">
+        <h1 class="text-5xl font-bold text-red-500 mb-8 tracking-widest text-center">BACKSTAB<br><span class="text-3xl text-white">ARENA</span></h1>
+        
+        <div class="flex gap-4 mb-8">
+            <div class="bg-gray-800 p-4 rounded-lg text-center border border-gray-700">
+                <p class="text-gray-400 text-sm">보유 재화</p>
+                <p class="text-2xl font-bold text-yellow-400" id="currencyDisplay">0</p>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-lg text-center border border-gray-700">
+                <p class="text-gray-400 text-sm">전적</p>
+                <p class="text-xl font-bold"><span id="winDisplay" class="text-blue-400">0</span>승 <span id="lossDisplay" class="text-red-400">0</span>패</p>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-4 w-64">
+            <button onclick="joinGame()" class="bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-bold text-lg transition shadow-lg shadow-red-500/30">온라인 매칭 시작</button>
+            <button onclick="showGacha()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold text-lg transition">기술 뽑기</button>
+            <button onclick="showEquip()" class="bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold text-lg transition">기술 장착</button>
+        </div>
+        
+        <p class="mt-8 text-gray-400 text-sm max-w-md text-center leading-relaxed">
+            <strong class="text-white">조작키:</strong><br>
+            W/스페이스바(점프) | A, D(이동) | S/우클릭(슬라이딩)<br>
+            좌클릭(공격) | 숫자 1, 2, 3(스킬)
+        </p>
+    </div>
+
+    <!-- 뽑기 화면 -->
+    <div id="gachaScreen" class="ui-layer pointer-events-auto fade-in">
+        <h2 class="text-3xl font-bold mb-4">기술 뽑기</h2>
+        <p class="mb-8">1회 비용: <span class="text-yellow-400 font-bold">1</span> 재화</p>
+        
+        <div class="bg-gray-800 p-6 rounded-lg mb-8 text-center max-w-sm w-full min-h-[150px] flex items-center justify-center border-2 border-transparent" id="gachaResultBox">
+            <p class="text-gray-400">뽑기 버튼을 눌러주세요</p>
+        </div>
+
+        <div class="flex gap-4">
+            <button onclick="drawGacha()" class="bg-blue-600 hover:bg-blue-700 py-2 px-6 rounded-lg font-bold">1회 뽑기</button>
+            <button onclick="hideGacha()" class="bg-gray-600 hover:bg-gray-700 py-2 px-6 rounded-lg font-bold">돌아가기</button>
+        </div>
+    </div>
+
+    <!-- 기술 장착 화면 -->
+    <div id="equipScreen" class="ui-layer pointer-events-auto p-8 fade-in overflow-y-auto">
+        <h2 class="text-3xl font-bold mb-8">기술 장착</h2>
+        
+        <div class="w-full max-w-2xl">
+            <h3 class="text-xl mb-2 text-yellow-400">장착된 기술 (최대 3개)</h3>
+            <div id="equippedSkills" class="flex gap-2 mb-8 bg-gray-800 p-4 rounded-lg min-h-[80px]"></div>
+
+            <h3 class="text-xl mb-2">보유한 기술</h3>
+            <div id="inventorySkills" class="grid grid-cols-2 md:grid-cols-3 gap-2 bg-gray-800 p-4 rounded-lg h-64 overflow-y-auto"></div>
+        </div>
+
+        <button onclick="hideEquip()" class="mt-8 bg-gray-600 hover:bg-gray-700 py-2 px-8 rounded-lg font-bold">저장 및 돌아가기</button>
+    </div>
+
+    <!-- 대기 화면 -->
+    <div id="waitingScreen" class="ui-layer pointer-events-auto">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-red-500 mb-4"></div>
+        <h2 class="text-2xl font-bold text-white">상대방을 기다리는 중...</h2>
+    </div>
+
+    <!-- 인게임 UI -->
+    <div id="inGameUI" class="ui-layer">
+        <div class="flex justify-between items-start w-full max-w-4xl mx-auto pointer-events-auto">
+            <div class="w-1/3">
+                <p class="font-bold mb-1"><span id="myHpName">나 (Player)</span> <span id="p1HpText" class="text-sm font-normal text-gray-300">500 / 500</span></p>
+                <div class="w-full bg-gray-700 h-4 rounded overflow-hidden"><div id="p1HpBar" class="bg-green-500 h-full w-full transition-all duration-200"></div></div>
+                <div id="p1Debuffs" class="flex gap-1 mt-1 text-xs text-red-400 font-bold"></div>
+            </div>
+            <div class="flex flex-col items-center">
+                <div id="timeDisplay" class="text-3xl font-mono font-bold mt-1 text-yellow-400 drop-shadow-md">00:00</div>
+                <div id="bossAnnouncement" class="text-red-500 font-bold text-lg mt-2 animate-pulse h-6"></div>
+            </div>
+            <div class="w-1/3 text-right">
+                <p class="font-bold mb-1"><span id="p2HpText" class="text-sm font-normal text-gray-300">500 / 500</span> 상대방 (Enemy)</p>
+                <div class="w-full bg-gray-700 h-4 rounded overflow-hidden flex justify-end"><div id="p2HpBar" class="bg-red-500 h-full w-full transition-all duration-200"></div></div>
+                <div id="p2Debuffs" class="flex gap-1 mt-1 justify-end text-xs text-red-400 font-bold"></div>
+            </div>
+        </div>
+
+        <!-- 스킬 아이콘 (하단) -->
+        <div class="flex justify-center gap-4 mb-8 pointer-events-auto">
+            <div class="relative w-14 h-14 bg-gray-800 border-2 border-gray-600 rounded flex items-center justify-center text-xs text-center font-bold" id="skillUI1">
+                <span id="skillName1">Skill 1</span><div id="skillCool1" class="cooldown-overlay h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-400 text-xs">1</div>
+            </div>
+            <div class="relative w-14 h-14 bg-gray-800 border-2 border-gray-600 rounded flex items-center justify-center text-xs text-center font-bold" id="skillUI2">
+                <span id="skillName2">Skill 2</span><div id="skillCool2" class="cooldown-overlay h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-400 text-xs">2</div>
+            </div>
+            <div class="relative w-14 h-14 bg-gray-800 border-2 border-gray-600 rounded flex items-center justify-center text-xs text-center font-bold" id="skillUI3">
+                <span id="skillName3">Skill 3</span><div id="skillCool3" class="cooldown-overlay h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-400 text-xs">3</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 결과 메시지 -->
+    <div id="messageOverlay" class="ui-layer pointer-events-auto">
+        <div class="text-center">
+            <h1 id="messageTitle" class="text-6xl font-bold mb-4 text-white"></h1>
+            <button onclick="location.reload()" class="mt-8 bg-gray-600 hover:bg-gray-700 py-3 px-8 rounded-lg font-bold shadow-lg">로비로 돌아가기</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 데이터 베이스 (스킬 및 확률)
+        // ==========================================
+        const SKILL_DB = {
+            'slow': { id: 'slow', name: '슬로우', rank: '기본', type: 'projectile', cd: 8, desc: '투사체 적중시 3초간 속도 감소' },
+            'snare': { id: 'snare', name: '속박', rank: '기본', type: 'projectile', cd: 12, desc: '투사체 적중시 0.5초간 이동 불가' },
+            'teleport': { id: 'teleport', name: '순간이동', rank: '기본', type: 'instant', cd: 5, desc: '바라보는 방향으로 순간이동' },
+            'mission': { id: 'mission', name: '지령', rank: '초급', type: 'instant', cd: 15, desc: '즉시 이동속도 증가 버프 획득' },
+            'bombard': { id: 'bombard', name: '호출', rank: '초급', type: 'instant', cd: 20, desc: '하늘에서 10데미지 포탄 3개 투하' },
+            'front_tp': { id: 'front_tp', name: '앞치기', rank: '초급', type: 'instant', cd: 12, desc: '적의 바로 앞으로 순간이동' },
+            'distance': { id: 'distance', name: '거리조절', rank: '초급', type: 'instant', cd: 25, desc: '3초간 적과 접근 불가 (밀어냄)' },
+            'silence': { id: 'silence', name: '침묵', rank: '중급', type: 'projectile', cd: 20, desc: '적중시 5초간 스킬 봉인' },
+            'purify': { id: 'purify', name: '해방', rank: '중급', type: 'instant', cd: 15, desc: '자신의 디버프 즉시 해제' },
+            'mine': { id: 'mine', name: '지뢰', rank: '중급', type: 'instant', cd: 15, desc: '50데미지 지뢰 설치' },
+            'deathnote': { id: 'deathnote', name: '데스노트', rank: '고급', type: 'instant', cd: 60, desc: '적 체력 즉시 100 감소' },
+            'heal': { id: 'heal', name: '영웅은...', rank: '고급', type: 'instant', cd: 40, desc: '3초간 체력 회복. 지속 중 부활' },
+            'gun': { id: 'gun', name: 'gun법', rank: '고급', type: 'instant', cd: 30, desc: '6회 평타가 원거리 총기로 변경' },
+            'shorten': { id: 'shorten', name: '단축', rank: '관령', type: 'instant', cd: 99, desc: '게임 시간을 1분 앞당김' },
+            'roar': { id: 'roar', name: '호령', rank: '관령', type: 'instant', cd: 40, desc: '디버프 해제 및 버프. 근접 적에게 피해' },
+            'tiger': { id: 'tiger', name: '맹호살격', rank: '관령', type: 'instant', cd: 30, desc: '2초 대기 후 적에게 100 피해' },
+            'bankai': { id: 'bankai', name: '만해', rank: '하만', type: 'instant', cd: 30, desc: '고급 이상 스킬 무작위 1개 발동' },
+            'awp': { id: 'awp', name: '에땁', rank: '하만', type: 'instant', cd: 45, desc: '5회 평타가 50데미지 저격총 변경' },
+            'god': { id: 'god', name: '신의 가호', rank: '하만', type: 'instant', cd: 50, desc: '7초간 무적 (등 터치 방어)' },
+            'copy': { id: 'copy', name: '카피', rank: '청령', type: 'instant', cd: 60, desc: '장착 스킬이 상대 스킬로 변경됨' }
+        };
+
+        const GACHA_PROB = [
+            { rank: '초급', prob: 68.4, skills: ['mission', 'bombard', 'front_tp', 'distance'] },
+            { rank: '중급', prob: 20.0, skills: ['silence', 'purify', 'mine'] },
+            { rank: '고급', prob: 10.0, skills: ['deathnote', 'heal', 'gun'] },
+            { rank: '관령', prob: 1.0, skills: ['shorten', 'roar', 'tiger'] },
+            { rank: '하만', prob: 0.5, skills: ['bankai', 'awp', 'god'] },
+            { rank: '청령', prob: 0.1, skills: ['copy'] }
+        ];
+
+        const RANK_COLORS = { '기본':'#aaaaaa', '초급':'#ffffff', '중급':'#22c55e', '고급':'#3b82f6', '관령':'#a855f7', '하만':'#ef4444', '청령':'#eab308' };
+
+        // ==========================================
+        // 유저 데이터 (로컬 스토리지 연동)
+        // ==========================================
+        let userData = { currency: 10, wins: 0, losses: 0, unlockedSkills: ['slow', 'snare', 'teleport'], equippedSkills: ['slow', 'snare', 'teleport'] };
+        
+        function loadData() {
+            let saved = localStorage.getItem('backstabData');
+            if(saved) userData = JSON.parse(saved);
+            updateLobbyUI();
+        }
+        function saveData() { localStorage.setItem('backstabData', JSON.stringify(userData)); updateLobbyUI(); }
+
+        // ==========================================
+        // 상태 변수 & 물리 엔진
+        // ==========================================
+        let socket, myRole = null, myPlayer = null, enemyPlayer = null, gameLoopId = null;
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height, groundY;
+        
+        let gameState = 'lobby'; 
+        let matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false };
+        let keys = { a: false, d: false, w: false, s: false, space: false };
+        let mouse = { click: false, rightClick: false };
+
+        let projectiles = [], particles = [], entities = [];
+
+        class Player {
+            constructor(x, isP1) {
+                this.isP1 = isP1; this.width = 40; this.height = 80;
+                this.x = x; this.y = 0; this.vx = 0; this.vy = 0;
+                this.maxHp = 500; this.hp = 500; this.facing = isP1 ? 1 : -1; 
+                this.state = 'idle'; this.stateTimer = 0;
+                
+                // 스킬 및 상태 버프/디버프
+                this.invul = false; this.godMode = false;
+                this.speedMult = 1.0; this.jumpMult = 1.0;
+                this.silenced = false; this.distanceLock = false;
+                this.healTick = 0; this.revive = false;
+                this.gunAmmo = 0; this.awpAmmo = 0;
+                
+                this.skills = [null, null, null];
+                this.cooldowns = [0, 0, 0];
+                this.lastAction = { type: null, id: null, ts: 0 };
+            }
+
+            applyDamage(amount) {
+                if(this.invul || this.godMode) return;
+                this.hp -= amount;
+                if(!matchState.horonActive && this.hp < 0.1) this.hp = 0.1;
+                
+                if(this.hp <= 0 && this.revive) {
+                    this.hp = 50; this.revive = false;
+                    createParticles(this.x + this.width/2, this.y, '#eab308', 30);
+                }
+                if(this.hp < 0) this.hp = 0; if(this.hp > this.maxHp) this.hp = this.maxHp;
+                this.updateDebuffs();
+            }
+
+            updateDebuffs() {
+                let hpRatio = this.hp / this.maxHp;
+                if(hpRatio < 0.3) this.speedMult = 0.6; else if(hpRatio < 0.6) this.speedMult = 0.8; else this.speedMult = 1.0;
+                
+                // 시야 디버프 (내 캐릭터 기준)
+                if(this === myPlayer) {
+                    const overlay = document.getElementById('visionOverlay');
+                    if(hpRatio < 0.5) {
+                        let visionSize = hpRatio * 200;
+                        overlay.style.background = `radial-gradient(circle at center, transparent ${visionSize}%, rgba(0,0,0,0.95) ${visionSize + 20}%)`;
+                    } else overlay.style.background = 'none';
+                }
+            }
+
+            update(dt) {
+                if(isNaN(this.x)) this.x = width / 2; if(isNaN(this.y)) this.y = groundY - this.height;
+
+                this.vy += 2000 * dt; this.y += this.vy * dt; this.x += this.vx * dt;
+                
+                if (this.y + this.height >= groundY) { this.y = groundY - this.height; this.vy = 0; if(this.state === 'jump') this.state = 'idle'; }
+                if(this.x < 0) this.x = 0; if(this.x + this.width > width) this.x = width - this.width;
+                
+                if(this.stateTimer > 0) { this.stateTimer -= dt; if(this.stateTimer <= 0) { if(this.state === 'slide') this.invul = false; this.state = 'idle'; } }
+                
+                let cdMult = matchState.myungshinActive ? 2.0 : 1.0; 
+                for(let i=0; i<3; i++) { if(this.cooldowns[i] > 0) this.cooldowns[i] -= dt * cdMult; else this.cooldowns[i] = 0; }
+                
+                if(this.state !== 'slide' && this.state !== 'stun') this.vx *= 0.8; 
+                if(this.healTick > 0) { this.healTick -= dt; this.applyDamage(-10 * dt); }
+            }
+
+            draw() {
+                if(isNaN(this.x) || isNaN(this.y)) return;
+                ctx.save(); ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                
+                if(this.invul || this.godMode) ctx.globalAlpha = 0.5;
+                ctx.fillStyle = this.isP1 ? '#3b82f6' : '#ef4444';
+                
+                if(this.state === 'slide') ctx.fillRect(-this.width/2, 0, this.width, this.height/2); 
+                else ctx.fillRect(-this.width/2, -this.height/2, this.width, this.height);
+                
+                ctx.fillStyle = 'white'; let eyeOffsetX = this.facing === 1 ? 10 : -15; let eyeY = this.state === 'slide' ? 5 : -25;
+                ctx.fillRect(eyeOffsetX, eyeY, 5, 5);
+                
+                // 상태 이펙트
+                if(this.state === 'stun') { ctx.fillStyle = 'yellow'; ctx.fillText("⚡", -10, -40); }
+                if(this.silenced) { ctx.fillStyle = 'gray'; ctx.fillText("...", -10, -50); }
+                if(this.awpAmmo > 0) { ctx.fillStyle = '#111'; ctx.fillRect(this.facing === 1 ? 0 : -30, eyeY + 10, 30, 4); }
+                else if(this.gunAmmo > 0) { ctx.fillStyle = '#666'; ctx.fillRect(this.facing === 1 ? 0 : -15, eyeY + 10, 15, 4); }
+                
+                // 공격 이펙트 (시각적)
+                if(this.state === 'attack') {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.fillRect(this.facing === 1 ? this.width/2 : -50-this.width/2, -this.height/2 + 10, 50, this.height - 20);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // UI & 로비 로직
+        // ==========================================
+        function updateLobbyUI() {
+            document.getElementById('currencyDisplay').innerText = userData.currency;
+            document.getElementById('winDisplay').innerText = userData.wins;
+            document.getElementById('lossDisplay').innerText = userData.losses;
+        }
+
+        function showGacha() { document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('gachaScreen').style.display = 'flex'; document.getElementById('gachaResultBox').innerHTML = '<p class="text-gray-400">뽑기 버튼을 눌러주세요</p>'; document.getElementById('gachaResultBox').style.borderColor = 'transparent'; }
+        function hideGacha() { document.getElementById('gachaScreen').style.display = 'none'; document.getElementById('lobbyScreen').style.display = 'flex'; saveData(); }
+        function drawGacha() {
+            if(userData.currency < 1) { alert("재화가 부족합니다!"); return; } 
+            userData.currency--; saveData();
+            let roll = Math.random() * 100; let cumulative = 0; let selectedRank = GACHA_PROB[0];
+            for(let r of GACHA_PROB) { cumulative += r.prob; if(roll <= cumulative) { selectedRank = r; break; } }
+            let skillId = selectedRank.skills[Math.floor(Math.random() * selectedRank.skills.length)]; let skillInfo = SKILL_DB[skillId];
+            if(!userData.unlockedSkills.includes(skillId)) userData.unlockedSkills.push(skillId);
+            const box = document.getElementById('gachaResultBox'); box.style.borderColor = RANK_COLORS[skillInfo.rank];
+            box.innerHTML = `<div class="animate-bounce"><p class="text-sm" style="color:${RANK_COLORS[skillInfo.rank]}">${skillInfo.rank} 등급 획득!</p><p class="text-3xl font-bold mt-2">${skillInfo.name}</p><p class="text-sm text-gray-300 mt-2">${skillInfo.desc}</p></div>`;
+            saveData();
+        }
+
+        function showEquip() { document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('equipScreen').style.display = 'flex'; renderEquipUI(); }
+        function hideEquip() { document.getElementById('equipScreen').style.display = 'none'; document.getElementById('lobbyScreen').style.display = 'flex'; saveData(); }
+        function renderEquipUI() {
+            const eqContainer = document.getElementById('equippedSkills'); const invContainer = document.getElementById('inventorySkills');
+            eqContainer.innerHTML = ''; invContainer.innerHTML = '';
+            for(let i=0; i<3; i++) {
+                let skillId = userData.equippedSkills[i]; let div = document.createElement('div');
+                div.className = 'flex-1 p-2 rounded text-center text-sm font-bold border-2 cursor-pointer transition';
+                if(skillId) { div.style.borderColor = RANK_COLORS[SKILL_DB[skillId].rank]; div.innerHTML = `${SKILL_DB[skillId].name}<br><span class="text-xs font-normal">${SKILL_DB[skillId].rank}</span>`; div.onclick = () => unequipSkill(i); }
+                else { div.style.borderColor = '#4b5563'; div.innerText = '빈 슬롯'; }
+                eqContainer.appendChild(div);
+            }
+            userData.unlockedSkills.forEach(skillId => {
+                let div = document.createElement('div'); div.className = 'p-2 rounded text-center text-sm font-bold border-2 cursor-pointer hover:bg-gray-700 transition';
+                div.style.borderColor = RANK_COLORS[SKILL_DB[skillId].rank]; div.innerHTML = `${SKILL_DB[skillId].name}<br><span class="text-xs font-normal text-gray-400">${SKILL_DB[skillId].desc}</span>`;
+                if(userData.equippedSkills.includes(skillId)) div.classList.add('opacity-50'); else div.onclick = () => equipSkill(skillId);
+                invContainer.appendChild(div);
+            });
+        }
+        function equipSkill(skillId) { let emptyIdx = userData.equippedSkills.indexOf(null); if(emptyIdx === -1) emptyIdx = userData.equippedSkills.findIndex(s => s === undefined); if(emptyIdx !== -1) userData.equippedSkills[emptyIdx] = skillId; else userData.equippedSkills[0] = skillId; renderEquipUI(); }
+        function unequipSkill(index) { userData.equippedSkills[index] = null; renderEquipUI(); }
+
+        // ==========================================
+        // 서버 연결 및 멀티플레이 관리
+        // ==========================================
+        function joinGame() {
+            document.getElementById('lobbyScreen').style.display = 'none';
+            document.getElementById('waitingScreen').style.display = 'flex';
+            if (!socket) initSocket();
+        }
+
+        function initSocket() {
+            socket = io("http://localhost:3000");
+
+            socket.on("connect", () => {
+                document.getElementById('serverStatus').innerText = "서버 연결됨";
+                document.getElementById('serverStatus').className = "pointer-events-auto text-green-400 border border-green-500";
+            });
+
+            socket.on("roleAssign", (role) => {
+                myRole = role;
+                document.getElementById('myHpName').innerText = myRole === 'p1' ? "나 (1P/왼쪽)" : "나 (2P/오른쪽)";
+            });
+
+            socket.on("gameStart", () => {
+                document.getElementById('waitingScreen').style.display = 'none';
+                document.getElementById('inGameUI').style.display = 'flex';
+                initRound();
+            });
+
+            socket.on("playerLeft", () => {
+                if(gameState === 'playing') {
+                    gameState = 'result';
+                    userData.wins++; userData.currency++; saveData();
+                    showMessage("상대방 도주!", "부전승으로 승리하셨습니다. (재화 1 획득)");
+                }
+            });
+
+            socket.on("enemyState", (data) => {
+                if(enemyPlayer && gameState === 'playing') {
+                    if (!isNaN(data.x) && !isNaN(data.y)) { enemyPlayer.x = data.x; enemyPlayer.y = data.y; }
+                    enemyPlayer.state = data.state; enemyPlayer.facing = data.facing;
+                    enemyPlayer.hp = data.hp; enemyPlayer.invul = data.invul;
+                    enemyPlayer.skills = data.skills || []; 
+
+                    // 상대방의 스킬 및 공격 액션 동기화 (원격 실행)
+                    if (data.lastAction && data.lastAction.ts > (enemyPlayer.lastAction.ts || 0)) {
+                        enemyPlayer.lastAction = data.lastAction;
+                        if (data.lastAction.type === 'skill') useSkill(enemyPlayer, data.lastAction.id, true);
+                        else if (data.lastAction.type === 'attack') executeAttack(enemyPlayer, true);
+                    }
+                }
+            });
+        }
+
+        function resize() {
+            width = window.innerWidth || 800; height = window.innerHeight || 600; 
+            canvas.width = width; canvas.height = height; groundY = height - 100;
+        }
+        window.addEventListener('resize', resize); loadData(); resize();
+
+        function initRound() {
+            resize(); 
+            let p1 = new Player(width * 0.2, true); let p2 = new Player(width * 0.8, false);
+            p1.y = groundY - p1.height; p2.y = groundY - p2.height;
+            
+            if(!myRole) myRole = 'p1'; 
+            if(myRole === 'p1') { myPlayer = p1; enemyPlayer = p2; } else { myPlayer = p2; enemyPlayer = p1; }
+
+            // 스킬 장착 UI 연동
+            myPlayer.skills = [...userData.equippedSkills];
+            for(let i=0; i<3; i++) {
+                let skillId = myPlayer.skills[i];
+                if(skillId) { 
+                    document.getElementById(`skillName${i+1}`).innerText = SKILL_DB[skillId].name; 
+                    document.getElementById(`skillUI${i+1}`).style.borderColor = RANK_COLORS[SKILL_DB[skillId].rank]; 
+                } else { 
+                    document.getElementById(`skillName${i+1}`).innerText = '-'; 
+                    document.getElementById(`skillUI${i+1}`).style.borderColor = '#4b5563'; 
+                }
+            }
+
+            matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false };
+            projectiles = []; particles = []; entities = [];
+            gameState = 'playing'; 
+            
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function showMessage(title, sub) {
+            document.getElementById('messageTitle').innerHTML = title + "<br><span class='text-2xl mt-4 block text-yellow-300'>" + sub + "</span>"; 
+            document.getElementById('messageOverlay').style.display = 'flex';
+        }
+
+        // ==========================================
+        // 스킬 및 공격 로직 (네트워크 동기화)
+        // ==========================================
+        function attemptSkill(idx) {
+            let skillId = myPlayer.skills[idx];
+            if(!skillId || myPlayer.cooldowns[idx] > 0 || myPlayer.state === 'stun' || myPlayer.silenced) return;
+            
+            myPlayer.cooldowns[idx] = SKILL_DB[skillId].cd;
+            myPlayer.lastAction = { type: 'skill', id: skillId, ts: Date.now() };
+            useSkill(myPlayer, skillId, false);
+        }
+
+        function useSkill(caster, skillId, isRemote = false) {
+            let target = caster === myPlayer ? enemyPlayer : myPlayer;
+            let dir = caster.facing;
+
+            switch(skillId) {
+                // 투사체 (양쪽 클라이언트에서 생성 후 스스로 충돌 판정)
+                case 'slow': case 'snare': case 'silence':
+                    projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 600, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: skillId === 'slow' ? '#60a5fa' : (skillId==='snare' ? '#facc15' : '#a855f7') }); break;
+                // 버프 및 즉시 이동
+                case 'teleport': caster.x += dir * 200; createParticles(caster.x, caster.y+40, '#fff', 10); break;
+                case 'mission': caster.speedMult += 0.2; caster.jumpMult += 0.2; createParticles(caster.x, caster.y, '#22c55e', 20); break;
+                case 'front_tp': caster.x = target.x - (target.facing * 60); caster.facing = target.facing; createParticles(caster.x, caster.y+40, '#fff', 10); break;
+                case 'distance': caster.distanceLock = true; target.distanceLock = true; setTimeout(() => { caster.distanceLock = false; target.distanceLock = false; }, 3000); break;
+                case 'purify': caster.silenced = false; caster.speedMult = Math.max(1.0, caster.speedMult); createParticles(caster.x, caster.y, '#fff', 20); break;
+                case 'heal': caster.healTick = 3.0; caster.revive = true; break;
+                case 'gun': caster.gunAmmo = 6; break;
+                case 'awp': caster.awpAmmo = 5; break;
+                case 'god': caster.godMode = true; setTimeout(() => { caster.godMode = false; }, 7000); break;
+                case 'shorten': if(!isRemote) matchState.timeElapsed += 60; break;
+                
+                // 지뢰 & 폭탄
+                case 'bombard': for(let i=0; i<3; i++) { setTimeout(() => { projectiles.push({ x: target.x + (Math.random()*100 - 50), y: -50, vx: 0, vy: 800, width: 20, height: 40, owner: caster, type: 'bomb', color: '#ef4444' }); }, i * 300); } break;
+                case 'mine': entities.push({ x: caster.x + caster.width/2 - 15, y: groundY - 10, width: 30, height: 10, owner: caster, type: 'mine' }); break;
+                
+                // 특수 판정 (타겟에게 직접 데미지 부여)
+                case 'deathnote':
+                    if(caster === enemyPlayer) myPlayer.applyDamage(100); 
+                    createParticles(target.x, target.y, '#000', 30); break;
+                case 'roar':
+                    caster.silenced = false; caster.speedMult += 0.3; caster.jumpMult += 0.3;
+                    if(Math.abs(caster.x - target.x) < 200) {
+                        if(caster === enemyPlayer) { myPlayer.speedMult -= 0.3; myPlayer.applyDamage(30); }
+                        createParticles(target.x, target.y, '#f59e0b', 30);
+                    } break;
+                case 'tiger':
+                    caster.state = 'stun'; caster.stateTimer = 2.0;
+                    setTimeout(() => {
+                        if(caster.hp > 0) {
+                            caster.x = target.x;
+                            if(caster === enemyPlayer) { let dmg = myPlayer.invul || myPlayer.godMode ? 30 : 100; myPlayer.invul = false; myPlayer.godMode = false; myPlayer.applyDamage(dmg); }
+                            createParticles(target.x, target.y, '#f59e0b', 40);
+                        }
+                    }, 2000); break;
+                case 'bankai':
+                    if(!isRemote) {
+                        let highSkills = ['deathnote', 'heal', 'gun', 'shorten', 'roar', 'tiger', 'awp', 'god'];
+                        let randSkill = highSkills[Math.floor(Math.random() * highSkills.length)];
+                        useSkill(caster, randSkill, false);
+                        myPlayer.lastAction = { type: 'skill', id: randSkill, ts: Date.now() }; // 후속 스킬 서버 전송
+                    } break;
+                case 'copy':
+                    if(!isRemote) caster.skills = [...target.skills]; break;
+            }
+        }
+
+        function executeAttack(attacker, isRemote = false) {
+            if(attacker.state === 'slide' || attacker.state === 'attack') return;
+            attacker.state = 'attack'; attacker.stateTimer = 0.3;
+
+            if(!isRemote) myPlayer.lastAction = { type: 'attack', id: null, ts: Date.now() };
+
+            let target = attacker === myPlayer ? enemyPlayer : myPlayer;
+
+            // 원거리 무기 판정
+            if(attacker.awpAmmo > 0) { attacker.awpAmmo--; projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 20, vx: attacker.facing * 1500, vy: 0, width: 30, height: 5, owner: attacker, type: 'awp', color: '#111' }); return; }
+            else if(attacker.gunAmmo > 0) { attacker.gunAmmo--; projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 20, vx: attacker.facing * 1000, vy: 0, width: 10, height: 5, owner: attacker, type: 'gun', color: '#666' }); return; }
+
+            // 근접 타격 판정 (내 클라이언트에서 내가 맞았을 때, 혹은 내가 등 터치를 성공했을 때 판별)
+            let reach = 50; let hitX = attacker.facing === 1 ? attacker.x + attacker.width : attacker.x - reach; let hitY = attacker.y;
+
+            if( hitX < target.x + target.width && hitX + reach > target.x && hitY < target.y + target.height && hitY + attacker.height > target.y) {
+                if(target.invul) return; 
+                
+                if(attacker.facing === target.facing && !target.godMode) { 
+                    // 등 터치 (Backstab) - 각 클라이언트가 스스로 승/패 판정
+                    gameState = 'result';
+                    if(attacker === myPlayer) { userData.wins++; userData.currency++; showMessage("WIN!", "상대의 등을 완벽히 터치했습니다! (재화 1 획득)"); }
+                    else { userData.losses++; showMessage("LOSE", "등을 내어주었습니다..."); }
+                    saveData();
+                } else { 
+                    // 정면 타격 - 타겟이 본인일 경우에만 HP 감소 (데미지 중복 적용 방지)
+                    if(target === myPlayer) { target.vx = attacker.facing * 500; target.applyDamage(5); }
+                    createParticles(target.x + target.width/2, target.y + target.height/2, '#fff', 5);
+                }
+            }
+        }
+
+        function createParticles(x, y, color, count) { for(let i=0; i<count; i++) particles.push({ x: x, y: y, vx: (Math.random() - 0.5) * 400, vy: (Math.random() - 0.5) * 400, life: 1.0, color: color }); }
+
+        // ==========================================
+        // 메인 게임 루프
+        // ==========================================
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if(gameState !== 'playing') return;
+            
+            let dt = (timestamp - lastTime) / 1000; 
+            if(dt > 0.1 || isNaN(dt) || dt < 0) dt = 0.016; 
+            lastTime = timestamp;
+
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#2d3748'; ctx.fillRect(0, 0, width, height); ctx.fillStyle = '#4a5568'; ctx.fillRect(0, groundY, width, height - groundY);
+
+            matchState.timeElapsed += dt; 
+            let minutes = Math.floor(matchState.timeElapsed / 60); let seconds = Math.floor(matchState.timeElapsed % 60);
+            document.getElementById('timeDisplay').innerText = `${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
+
+            // 보스 페이즈 처리
+            if(minutes >= 3 && !matchState.horonActive) { matchState.horonActive = true; document.getElementById('bossAnnouncement').innerText = "호론 등장! (체력 0 패배 가능)"; setTimeout(() => document.getElementById('bossAnnouncement').innerText = "", 3000); }
+            if(minutes >= 4 && !matchState.myungshinActive) { matchState.myungshinActive = true; document.getElementById('bossAnnouncement').innerText = "명신: TIME IS OUT (도트 데미지)"; }
+            if(matchState.myungshinActive) { myPlayer.applyDamage(5 * dt); } // 본인 체력만 감소 (서버로 동기화됨)
+
+            // 내 캐릭터 조작
+            if(myPlayer && myPlayer.state !== 'stun' && !myPlayer.silenced) {
+                let moveX = 0;
+                if(keys.a) moveX -= 1; if(keys.d) moveX += 1;
+                
+                if((myPlayer.distanceLock || enemyPlayer.distanceLock) && Math.abs(myPlayer.x - enemyPlayer.x) < 100) { if((myPlayer.x < enemyPlayer.x && moveX > 0) || (myPlayer.x > enemyPlayer.x && moveX < 0)) moveX = 0; }
+                
+                if(moveX !== 0 && myPlayer.state !== 'slide') { myPlayer.vx = moveX * 200 * myPlayer.speedMult; myPlayer.facing = moveX; }
+                if((keys.w || keys.space) && myPlayer.y >= groundY - myPlayer.height) { myPlayer.vy = -700 * myPlayer.jumpMult; myPlayer.state = 'jump'; }
+                if((keys.s || mouse.rightClick) && myPlayer.state === 'idle' && myPlayer.y >= groundY - myPlayer.height) { myPlayer.state = 'slide'; myPlayer.stateTimer = 0.5; myPlayer.invul = true; myPlayer.vx = myPlayer.facing * 500; mouse.rightClick = false; }
+                
+                if(mouse.click) { executeAttack(myPlayer); mouse.click = false; }
+            }
+            if(myPlayer) myPlayer.update(dt); 
+            if(enemyPlayer) enemyPlayer.update(dt);
+
+            // 상태 전송 (초당 60회)
+            socket.emit('playerState', { x: myPlayer.x, y: myPlayer.y, state: myPlayer.state, facing: myPlayer.facing, hp: myPlayer.hp, invul: myPlayer.invul, skills: myPlayer.skills, lastAction: myPlayer.lastAction });
+
+            // 투사체 처리
+            for(let i=projectiles.length-1; i>=0; i--) {
+                let p = projectiles[i]; p.x += p.vx * dt; p.y += p.vy * dt;
+                ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.width, p.height);
+                let target = p.owner === myPlayer ? enemyPlayer : myPlayer;
+                
+                if( p.x < target.x + target.width && p.x + p.width > target.x && p.y < target.y + target.height && p.y + p.height > target.y) {
+                    if(target === myPlayer && !target.invul && !target.godMode) {
+                        if(p.type === 'slow') target.speedMult = 0.5; else if(p.type === 'snare') { target.state = 'stun'; target.stateTimer = 0.5; }
+                        else if(p.type === 'silence') target.silenced = true; else if(p.type === 'bomb') target.applyDamage(10);
+                        else if(p.type === 'awp') target.applyDamage(50); else if(p.type === 'gun') { target.applyDamage(6); target.vx = 0; }
+                    }
+                    createParticles(p.x, p.y, p.color, 10); projectiles.splice(i, 1); continue;
+                }
+                if(p.y > groundY || p.x < 0 || p.x > width) projectiles.splice(i, 1);
+            }
+
+            // 설치물(지뢰) 처리
+            for(let i=entities.length-1; i>=0; i--) {
+                let e = entities[i]; ctx.fillStyle = '#ef4444'; ctx.fillRect(e.x, e.y, e.width, e.height); ctx.fillStyle = '#fca5a5'; ctx.fillRect(e.x+10, e.y-5, 10, 5);
+                let target = e.owner === myPlayer ? enemyPlayer : myPlayer;
+                if( target.x < e.x + e.width && target.x + target.width > e.x && target.y + target.height >= e.y) {
+                    if(target === myPlayer && !target.invul && !target.godMode) target.applyDamage(50);
+                    createParticles(e.x, e.y, '#f97316', 30); entities.splice(i, 1);
+                }
+            }
+
+            // 파티클 처리
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * 2;
+                if(p.life <= 0) particles.splice(i, 1); else { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 4, 4); ctx.globalAlpha = 1.0; }
+            }
+
+            // 체력 및 게임 종료 판정
+            if(matchState.horonActive) {
+                if(myPlayer.hp <= 0) { gameState = 'result'; userData.losses++; saveData(); showMessage("LOSE", "체력이 모두 소진되었습니다."); }
+                else if(enemyPlayer && enemyPlayer.hp <= 0) { gameState = 'result'; userData.wins++; userData.currency++; saveData(); showMessage("WIN!", "적을 쓰러뜨렸습니다! (재화 1 획득)"); }
+            }
+
+            // UI 렌더링
+            document.getElementById('p1HpBar').style.width = `${(myPlayer.hp/myPlayer.maxHp)*100}%`; document.getElementById('p1HpText').innerText = `${Math.floor(myPlayer.hp)} / ${myPlayer.maxHp}`;
+            document.getElementById('p1Debuffs').innerText = myPlayer.speedMult < 1.0 ? '이속감소' : '';
+            for(let i=0; i<3; i++) { let cdRatio = 0; let skillId = myPlayer.skills[i]; if(skillId) cdRatio = myPlayer.cooldowns[i] / SKILL_DB[skillId].cd; document.getElementById(`skillCool${i+1}`).style.height = `${cdRatio * 100}%`; }
+            
+            if(enemyPlayer) {
+                document.getElementById('p2HpBar').style.width = `${(enemyPlayer.hp/enemyPlayer.maxHp)*100}%`; document.getElementById('p2HpText').innerText = `${Math.floor(enemyPlayer.hp)} / ${enemyPlayer.maxHp}`;
+                document.getElementById('p2Debuffs').innerText = enemyPlayer.speedMult < 1.0 ? '이속감소' : '';
+            }
+
+            if(myRole === 'p1') { myPlayer.draw(); enemyPlayer.draw(); } else { enemyPlayer.draw(); myPlayer.draw(); }
+            
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // ==========================================
+        // 입력 처리 (1,2,3 스킬 키 포함)
+        // ==========================================
+        window.addEventListener('keydown', e => {
+            if(e.key.toLowerCase() === 'a') keys.a = true; if(e.key.toLowerCase() === 'd') keys.d = true;
+            if(e.key.toLowerCase() === 'w') keys.w = true; if(e.key.toLowerCase() === 's') keys.s = true;
+            if(e.code === 'Space') { keys.space = true; e.preventDefault(); }
+            if(gameState === 'playing') {
+                if(e.key === '1') attemptSkill(0); if(e.key === '2') attemptSkill(1); if(e.key === '3') attemptSkill(2);
+            }
+        });
+        window.addEventListener('keyup', e => {
+            if(e.key.toLowerCase() === 'a') keys.a = false; if(e.key.toLowerCase() === 'd') keys.d = false;
+            if(e.key.toLowerCase() === 'w') keys.w = false; if(e.key.toLowerCase() === 's') keys.s = false;
+            if(e.code === 'Space') keys.space = false;
+        });
+        window.addEventListener('mousedown', e => {
+            if(gameState === 'playing' && e.target.tagName === 'CANVAS') {
+                if(e.button === 0) mouse.click = true; if(e.button === 2) mouse.rightClick = true;
+            }
+        });
+        window.addEventListener('mouseup', e => { if(e.button === 2) mouse.rightClick = false; });
+
+    </script>
+</body>
+</html>
