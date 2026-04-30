@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Backstab Arena (Full Version)</title>
+    <title>Backstab Arena (Full Restore)</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Socket.io 연동 스크립트 (버전 호환성을 위해 경로를 상대 경로로 변경) -->
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #0f172a; color: white; touch-action: none; font-family: 'Segoe UI', sans-serif; }
         #gameCanvas { display: block; width: 100%; height: 100vh; }
@@ -32,7 +34,7 @@
 </head>
 <body oncontextmenu="return false;">
 
-    <div id="serverStatus" class="pointer-events-auto text-yellow-400 border border-yellow-500">서버 접속 중...</div>
+    <div id="serverStatus" class="pointer-events-auto text-yellow-400 border border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]">서버 접속 시도 중...</div>
 
     <canvas id="gameCanvas"></canvas>
     <div id="visionOverlay"></div>
@@ -48,13 +50,13 @@
             <input type="text" id="inputId" placeholder="아이디 (ID)" class="p-3 rounded bg-gray-900 border border-gray-700 text-white outline-none focus:border-blue-500 transition">
             <input type="password" id="inputPw" placeholder="비밀번호 (Password)" class="p-3 rounded bg-gray-900 border border-gray-700 text-white outline-none focus:border-blue-500 transition">
             
-            <button onclick="attemptLogin()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition shadow-lg mt-4">로그인</button>
+            <button id="btnLogin" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition shadow-lg mt-4 disabled:opacity-50" disabled>로그인 (서버 연결 대기 중)</button>
             <div class="flex items-center justify-between mt-2">
                 <hr class="w-full border-gray-600">
                 <span class="px-3 text-sm text-gray-400">OR</span>
                 <hr class="w-full border-gray-600">
             </div>
-            <button onclick="attemptRegister()" class="bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg font-bold transition shadow-lg">새 계정 생성하기</button>
+            <button id="btnRegister" class="bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg font-bold transition shadow-lg disabled:opacity-50" disabled>새 계정 생성하기</button>
         </div>
     </div>
 
@@ -164,4 +166,40 @@
                 <div id="skillCool1" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">1</div>
             </div>
             <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI2">
-                <span id="skillName2" class="z-10">Skill 2</span><span id="skillLv2" class="text-[10px] text-orange-300 z-10">Lv
+                <span id="skillName2" class="z-10">Skill 2</span><span id="skillLv2" class="text-[10px] text-orange-300 z-10">Lv.1</span>
+                <div id="skillCool2" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">2</div>
+            </div>
+            <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI3">
+                <span id="skillName3" class="z-10">Skill 3</span><span id="skillLv3" class="text-[10px] text-orange-300 z-10">Lv.1</span>
+                <div id="skillCool3" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">3</div>
+            </div>
+        </div>
+        
+        <div class="flex justify-center pointer-events-auto mt-2">
+            <div class="w-48 bg-gray-800 h-2 rounded overflow-hidden shadow-inner">
+                <div id="meleeCooldownBar" class="bg-white h-full w-0 transition-all duration-100"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="messageOverlay" class="ui-layer pointer-events-auto">
+        <div class="text-center">
+            <h1 id="messageTitle" class="text-7xl font-bold mb-4 text-white drop-shadow-[0_0_20px_rgba(0,0,0,1)]"></h1>
+            <button onclick="location.reload()" class="mt-12 bg-gray-700 hover:bg-gray-600 text-white py-4 px-10 rounded-lg font-bold text-xl shadow-[0_0_15px_rgba(255,255,255,0.2)] transition">처음으로 (데이터 저장됨)</button>
+        </div>
+    </div>
+
+    <script>
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
+                this.beginPath(); this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r); this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r); this.closePath(); return this;
+            }
+        }
+
+        const SKILL_DB = {
+            'slow': { id: 'slow', name: '슬로우', rank: '기본', cd: 8, desc: '적중시 3초간 속도 감소' },
+            'snare': { id: 'snare', name: '속박', rank: '기본', cd: 12, desc: '적중시 0.5초간 이동 불가' },
+            'teleport': { id: 'teleport', name: '순간이동', rank: '기
