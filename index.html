@@ -164,7 +164,7 @@
             </div>
         </div>
 
-        <!-- 하단 바 영역 (스킬 & 평타 쿨타임 바를 화면 최하단에 완벽 고정) -->
+        <!-- 하단 바 영역 (스킬 & 평타 쿨타임 바) -->
         <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center w-full max-w-md pointer-events-auto">
             <div class="flex justify-center gap-4 mb-3">
                 <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI1">
@@ -260,7 +260,6 @@
 
         for(let i=0; i<150; i++) bgStars.push({ x: Math.random() * 3000, y: Math.random() * 1500, size: Math.random() * 1.5 + 0.5, opacity: Math.random() });
 
-        // 페이지 로드 시 소켓 연결 및 창 크기 조절
         window.onload = () => { 
             initSocket(); 
             resize(); 
@@ -456,31 +455,27 @@
                 let breath = (this.state === 'idle') ? Math.sin(t) * 2 : 0; 
                 ctx.translate(0, breath);
 
-                // ★ 수정된 애니메이션 감지 조건: 캐릭터가 이동 중이면 무조건 실행되도록 확실한 조건 부여
                 let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && Math.abs(this.vx) > 10);
                 
-                // 달리기 사이클 계산 (보폭과 위상) - 보폭을 조금 더 크고 빠르게 설정
+                // 달리기 보폭 속도 계산 (속도가 빨라진 만큼 보폭도 맞춰줌)
                 let cycle = isRunning ? this.x * 0.08 : 0;
                 let armSwing = isRunning ? Math.sin(cycle) * 25 : 0;
 
-                // 상태 변수 세팅 (사격, 마법, 평타 구분)
                 let isShooting = (this.state === 'attack' && (this.gunActive || this.awpActive));
                 let isCasting = (this.state === 'cast');
                 let isMelee = (this.state === 'attack' && !this.gunActive && !this.awpActive);
 
-                // 상체(몸통, 머리, 팔) 기울기 설정
                 let bodyTilt = 0;
-                if (isShooting) bodyTilt = -this.facing * 0.15; // 총 쏠 때 반동으로 뒤로 살짝 젖힘
-                if (isCasting) bodyTilt = this.facing * 0.15;   // 마법 쓸 때 앞으로 살짝 숙임
+                if (isShooting) bodyTilt = -this.facing * 0.15; 
+                if (isCasting) bodyTilt = this.facing * 0.15;   
 
                 // ==========================================
-                // 1. 가장 뒤에 있는 레이어: 뒷 팔 (Back Arm)
+                // 1. 뒷 팔 (Back Arm)
                 // ==========================================
                 ctx.save();
-                ctx.rotate(bodyTilt); // 상체 기울기 적용
+                ctx.rotate(bodyTilt); 
                 ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.strokeStyle = secondaryColor;
                 ctx.beginPath(); ctx.moveTo(0, -10); 
-                // 총 쏘거나 마법 쓸 때 뒷팔을 뒤로 뻗어 균형을 잡음
                 if (isCasting || isShooting) {
                     ctx.lineTo(-this.facing * 15, 0); 
                 } else {
@@ -490,30 +485,27 @@
                 ctx.restore();
 
                 // ==========================================
-                // 2. 중간 뒤에 있는 레이어: 뒷 다리 (Back Leg)
+                // 2. 뒷 다리 (Back Leg)
                 // ==========================================
                 ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.strokeStyle = secondaryColor;
                 if (this.state === 'jump') {
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(-10 * this.facing, 25); ctx.lineTo(-15 * this.facing, 35); ctx.stroke();
                 } else if (isRunning) {
-                    // 뒷다리 달리기 위상
                     let s2 = Math.sin(cycle + Math.PI); let c2 = Math.cos(cycle + Math.PI);
                     let foot2X = s2 * 25; let foot2Y = 40 - Math.max(0, c2 * 15);
                     let knee2X = (foot2X / 2) + (c2 > 0 ? 10 : 0);
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(knee2X * this.facing, 25); ctx.lineTo(foot2X * this.facing, foot2Y); ctx.stroke();
                 } else {
-                    // 가만히 있을 때 짝다리 짚는 모습
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(-8 * this.facing, 40); ctx.stroke();
                 }
 
                 // ==========================================
-                // 3. 중간 레이어: 몸통, 망토, 머리 (Body & Head)
+                // 3. 몸통, 망토, 머리 (Body & Head)
                 // ==========================================
                 ctx.save();
-                ctx.rotate(bodyTilt); // 상체 기울기 적용
+                ctx.rotate(bodyTilt); 
                 
                 ctx.fillStyle = primaryColor; ctx.globalAlpha = 0.6; ctx.beginPath();
-                // 망토 길이를 살짝 줄여 다리 애니메이션이 잘 보이도록 수정 (y 35 -> 25)
                 let capeFlow = (this.vx !== 0) ? -this.facing * 25 : -this.facing * 10; let capeSway = Math.sin(t * 2) * 5;
                 ctx.moveTo(-5 * this.facing, -20); ctx.quadraticCurveTo(capeFlow, 0, capeFlow + capeSway, 25); ctx.lineTo(capeFlow + capeSway - 15 * this.facing, 25); ctx.lineTo(-10 * this.facing, -10); ctx.fill(); ctx.globalAlpha = 1.0;
                 
@@ -525,32 +517,29 @@
                 ctx.restore();
 
                 // ==========================================
-                // 4. 중간 앞에 있는 레이어: 앞 다리 (Front Leg)
+                // 4. 앞 다리 (Front Leg)
                 // ==========================================
                 ctx.lineWidth = 8; ctx.strokeStyle = primaryColor;
                 if (this.state === 'jump') {
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(15 * this.facing, 20); ctx.lineTo(10 * this.facing, 35); ctx.stroke();
                 } else if (isRunning) {
-                    // 앞다리 달리기 위상
                     let s1 = Math.sin(cycle); let c1 = Math.cos(cycle);
                     let foot1X = s1 * 25; let foot1Y = 40 - Math.max(0, c1 * 15);
                     let knee1X = (foot1X / 2) + (c1 > 0 ? 10 : 0);
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(knee1X * this.facing, 25); ctx.lineTo(foot1X * this.facing, foot1Y); ctx.stroke();
                 } else {
-                    // 가만히 있을 때 다리
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(8 * this.facing, 40); ctx.stroke();
                 }
 
                 // ==========================================
-                // 5. 가장 앞에 있는 레이어: 앞 팔과 무기 (Front Arm & Weapon)
+                // 5. 앞 팔과 무기 (Front Arm & Weapon)
                 // ==========================================
                 ctx.save();
-                ctx.rotate(bodyTilt); // 다시 앞팔과 무기를 위해 기울기 적용
+                ctx.rotate(bodyTilt); 
                 
-                // 총기 반동 시 무기가 몸쪽으로 당겨지는 효과
                 let recoilOffset = isShooting ? -this.facing * 8 : 0; 
                 let wOffsetX = this.facing * 15 + recoilOffset;
-                let wOffsetY = isShooting ? -2 : 0; // 쏠 때 총이 살짝 위로 들림
+                let wOffsetY = isShooting ? -2 : 0; 
 
                 if(this.awpActive) {
                     ctx.save(); ctx.translate(wOffsetX - (this.facing*5), -5 + wOffsetY); ctx.scale(this.facing, 1);
@@ -572,29 +561,23 @@
                 ctx.beginPath(); ctx.moveTo(0, -10);
                 
                 if (isMelee) {
-                    // 근접 공격 (앞으로 쭉 뻗음)
                     ctx.lineTo(this.facing * 25, -10); 
                 } else if (isShooting) {
-                    // 🔫 총기 반동: 팔이 'ㄱ' 자로 접힘
                     ctx.lineTo(this.facing * 5, -5); 
                     ctx.lineTo(this.facing * 15 + recoilOffset, -10 + wOffsetY);
                 } else if (isCasting) {
-                    // 🪄 마법 캐스팅: 손을 앞으로 길게 쭉 뻗음
                     ctx.lineTo(this.facing * 25, -15);
                 } else {
-                    // 평소 걷기 팔 흔들기
                     ctx.lineTo(-armSwing * this.facing, 10); 
                 }
                 ctx.stroke();
 
-                // 마법 캐스팅 이펙트 (손 끝 마법진)
                 if (isCasting) {
                     ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 15; ctx.fillStyle = 'rgba(168, 85, 247, 0.8)';
                     ctx.beginPath(); ctx.arc(this.facing * 28, -15, 6 + Math.random()*4, 0, Math.PI*2); ctx.fill();
                     ctx.shadowBlur = 0;
                 }
 
-                // 상태 표시 아이콘
                 if(this.state === 'stun') { ctx.fillStyle = 'yellow'; ctx.font = '20px sans-serif'; ctx.fillText("⚡", -10, -50); }
                 if(this.silenced) { ctx.fillStyle = 'gray'; ctx.font = '16px sans-serif'; ctx.fillText("...", -10, -55); }
                 
@@ -607,9 +590,8 @@
                     ctx.fillStyle = 'white'; ctx.font = '10px sans-serif'; ctx.fillText("RELOAD", -18, -60);
                 }
 
-                ctx.restore(); // 팔 기울기 해제
+                ctx.restore(); 
 
-                // 근접 공격 이펙트 (이미 translate가 되어있으므로 바로 그림)
                 if(isMelee) {
                     ctx.save(); 
                     ctx.shadowColor = primaryColor; ctx.shadowBlur = 20; ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -692,14 +674,12 @@
             canvas.height = height; 
             groundY = height - 120; 
             
-            // 브라우저 크기를 변경할 때마다 플레이어가 바닥 아래로 떨어지지 않도록 위치 보정
             if (myPlayer) myPlayer.y = Math.min(myPlayer.y, groundY - myPlayer.height);
             if (enemyPlayer) enemyPlayer.y = Math.min(enemyPlayer.y, groundY - enemyPlayer.height);
         }
         window.addEventListener('resize', resize);
 
         function initRound() {
-            // 게임 시작 시 시간 초과 방지를 위해 timeElapsed를 명시적으로 0으로 초기화
             matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false }; 
             resize(); 
             let p1 = new Player(width * 0.2, true); let p2 = new Player(width * 0.8, false);
@@ -749,16 +729,16 @@
         function useSkill(caster, skillId, isRemote = false) {
             let target = caster === myPlayer ? enemyPlayer : myPlayer; let dir = caster.facing; let lv = caster.skillLevels[skillId] || 1;
 
-            // 캐스팅(마법) 애니메이션 상태 부여 
             if (!['gun', 'awp', 'teleport', 'front_tp', 'tiger', 'distance'].includes(skillId)) {
                 caster.state = 'cast'; 
                 caster.stateTimer = 0.3;
             }
 
+            // ★ 투사체 마법 속도 2배 증가 (600 -> 1200)
             switch(skillId) {
-                case 'slow': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 600, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#60a5fa', level: lv }); break;
-                case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 600, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
-                case 'silence': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 600, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: '#a855f7', level: lv }); break;
+                case 'slow': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#60a5fa', level: lv }); break;
+                case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
+                case 'silence': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: '#a855f7', level: lv }); break;
                 case 'teleport': caster.x += dir * (150 + lv*50); createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
                 case 'mission': caster.speedMult += 0.1 + lv*0.1; caster.jumpMult += 0.1 + lv*0.1; createParticles(caster.x, caster.y, '#34d399', 30); break;
                 case 'front_tp': caster.x = target.x - (target.facing * 60); caster.facing = target.facing; createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
@@ -769,7 +749,8 @@
                 case 'awp': caster.awpActive = true; caster.gunActive = false; caster.awpClip = 5 + (lv-1); caster.reloadTimer = 0; break; 
                 case 'god': caster.godMode = true; setTimeout(() => { caster.godMode = false; }, 5000 + lv*2000); break;
                 case 'shorten': if(isAiMode || !isRemote) matchState.timeElapsed += 60; break;
-                case 'bombard': let bombCount = 2 + lv; for(let i=0; i<bombCount; i++) { setTimeout(() => { projectiles.push({ x: target.x + (Math.random()*150 - 75), y: -50, vx: 0, vy: 800, width: 20+lv*5, height: 40, owner: caster, type: 'bomb', color: '#f87171', level: lv }); }, i * 250); } break;
+                // ★ 포탄 떨어지는 속도 2배 증가 (800 -> 1600)
+                case 'bombard': let bombCount = 2 + lv; for(let i=0; i<bombCount; i++) { setTimeout(() => { projectiles.push({ x: target.x + (Math.random()*150 - 75), y: -50, vx: 0, vy: 1600, width: 20+lv*5, height: 40, owner: caster, type: 'bomb', color: '#f87171', level: lv }); }, i * 250); } break;
                 case 'mine': entities.push({ x: caster.x + caster.width/2 - 15, y: groundY - 10, width: 30 + (lv-1)*10, height: 10, owner: caster, type: 'mine', level: lv }); break;
                 case 'deathnote': if(target === myPlayer || isAiMode) target.applyDamage(70 + lv*30); createParticles(target.x, target.y, '#000000', 40); break;
                 case 'roar': caster.silenced = false; caster.speedMult += 0.3; caster.jumpMult += 0.3; if(Math.abs(caster.x - target.x) < 200 + lv*50) { if(target === myPlayer || isAiMode) { target.speedMult -= 0.3; target.applyDamage(20 + lv*10); } createParticles(target.x, target.y, '#f59e0b', 40); } break;
@@ -787,20 +768,19 @@
             attacker.state = 'attack'; attacker.stateTimer = 0.3;
             if(!isRemote && !isAiMode) myPlayer.lastAction = { type: 'attack', id: null, ts: Date.now() };
 
+            // ★ 총알 속도 및 넉백(반동) 거리 2배 증가
             if(attacker.awpActive && attacker.awpClip > 0) { 
                 attacker.awpClip--; let lv = attacker.skillLevels['awp'] || 1;
-                projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 3000, vy: 0, width: 40, height: 4, owner: attacker, type: 'awp', color: '#ef4444', level: lv }); 
+                projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 6000, vy: 0, width: 40, height: 4, owner: attacker, type: 'awp', color: '#ef4444', level: lv }); 
                 attacker.reloadTimer = 1.0; attacker.reloadType = 'awp'; 
-                // 저격총(에땁) 사격 시 강한 반동 (넉백)
-                attacker.vx = -attacker.facing * 400; 
+                attacker.vx = -attacker.facing * 800; // 반동 2배
                 return; 
             }
             else if(attacker.gunActive && attacker.gunClip > 0) { 
                 attacker.gunClip--; let lv = attacker.skillLevels['gun'] || 1;
-                projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 1500, vy: 0, width: 15, height: 4, owner: attacker, type: 'gun', color: '#60a5fa', level: lv }); 
+                projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 3000, vy: 0, width: 15, height: 4, owner: attacker, type: 'gun', color: '#60a5fa', level: lv }); 
                 if(attacker.gunClip <= 0) { attacker.reloadTimer = 2.0; attacker.reloadType = 'gun'; } 
-                // 권총 사격 시 가벼운 반동 (넉백)
-                attacker.vx = -attacker.facing * 150; 
+                attacker.vx = -attacker.facing * 300; // 반동 2배
                 return; 
             }
 
@@ -817,7 +797,8 @@
                     else { userData.losses++; showMessage("LOSE", "등을 내어주었습니다..."); }
                     saveData();
                 } else { 
-                    if(target === myPlayer || isAiMode) { target.vx = attacker.facing * 600; target.applyDamage(5); }
+                    // ★ 피격 시 밀려나는 거리 2배 증가 (600 -> 1200)
+                    if(target === myPlayer || isAiMode) { target.vx = attacker.facing * 1200; target.applyDamage(5); }
                     createParticles(target.x + target.width/2, target.y + target.height/2, '#60a5fa', 15);
                 }
             }
@@ -835,7 +816,12 @@
             else if (dist < optimalDist - 20 && isRanged) moveX = dx > 0 ? -1 : 1; 
 
             enemyPlayer.facing = dx > 0 ? 1 : -1;
-            if(moveX !== 0 && enemyPlayer.state !== 'slide') enemyPlayer.vx = moveX * 230 * enemyPlayer.speedMult;
+            
+            // ★ AI 최고 속도 2배 증가 (280 -> 560)
+            if(moveX !== 0 && enemyPlayer.state !== 'slide') {
+                let targetVx = moveX * 560 * enemyPlayer.speedMult;
+                enemyPlayer.vx += (targetVx - enemyPlayer.vx) * 12 * dt;
+            }
 
             if (enemyPlayer.state === 'idle') {
                 if (isRanged && Math.random() < 0.03) executeAttack(enemyPlayer, true);
@@ -896,7 +882,8 @@
                 let currentSpeedMult = gunReloading ? myPlayer.speedMult * 0.5 : myPlayer.speedMult; 
                 
                 if(moveX !== 0 && myPlayer.state !== 'slide') { 
-                    let targetVx = moveX * 350 * currentSpeedMult;
+                    // ★ 유저 최고 속도 2배 증가 (350 -> 700)
+                    let targetVx = moveX * 700 * currentSpeedMult;
                     myPlayer.vx += (targetVx - myPlayer.vx) * 12 * dt; 
                     myPlayer.facing = moveX; 
                 }
@@ -906,7 +893,8 @@
                     myPlayer.state = 'jump'; 
                 }
                 if((keys.s || mouse.rightClick) && myPlayer.state === 'idle' && myPlayer.y >= groundY - myPlayer.height) { 
-                    if(!gunReloading) { myPlayer.state = 'slide'; myPlayer.stateTimer = 0.45; myPlayer.invul = true; myPlayer.vx = myPlayer.facing * 550; mouse.rightClick = false; }
+                    // ★ 슬라이딩 속도 2배 증가 (550 -> 1100)
+                    if(!gunReloading) { myPlayer.state = 'slide'; myPlayer.stateTimer = 0.45; myPlayer.invul = true; myPlayer.vx = myPlayer.facing * 1100; mouse.rightClick = false; }
                 }
                 
                 if(mouse.click) { executeAttack(myPlayer); mouse.click = false; }
