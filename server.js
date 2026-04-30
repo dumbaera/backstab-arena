@@ -14,7 +14,7 @@ app.use(express.static('public'));
 // ==========================================
 // 🚨 여기에 MongoDB Atlas에서 복사한 주소를 넣으세요! 🚨
 // 예시: 'mongodb+srv://아이디:비밀번호@cluster0...mongodb.net/?retryWrites=true&w=majority'
-const MONGO_URI = '여기에_몽고DB_주소를_붙여넣으세요';
+const MONGO_URI = mongodb+srv://<db_dumbaera_9281_play>:<db_Gu0NVkLLh005AnBJ>@cluster0.fkzqfyl.mongodb.net/?appName=Cluster0;
 
 // 몽고DB 연결 시도
 mongoose.connect(MONGO_URI)
