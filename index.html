@@ -597,7 +597,8 @@
                 if(this.silenced) { ctx.fillStyle = 'gray'; ctx.font = '16px sans-serif'; ctx.fillText("...", -10, -55); }
                 
                 if(this.reloadTimer > 0) {
-                    let maxR = this.reloadType === 'gun' ? 2.0 : 1.0;
+                    // ★ 수정: UI 장전 게이지를 위한 최대 시간 기준을 각각 1초(건법), 0.5초(에땁)로 변경
+                    let maxR = this.reloadType === 'gun' ? 1.0 : 0.5;
                     let pRatio = 1.0 - (this.reloadTimer / maxR);
                     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.beginPath(); ctx.roundRect(-20, -55, 40, 6, 3); ctx.fill();
                     ctx.fillStyle = this.reloadType === 'awp' ? '#ef4444' : '#60a5fa'; 
@@ -784,14 +785,20 @@
             if(attacker.awpActive && attacker.awpClip > 0) { 
                 attacker.awpClip--; let lv = attacker.skillLevels['awp'] || 1;
                 projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 6000, vy: 0, width: 40, height: 4, owner: attacker, type: 'awp', color: '#ef4444', level: lv }); 
-                attacker.reloadTimer = 1.0; attacker.reloadType = 'awp'; 
+                
+                // ★ 수정: 에땁 장전 속도를 0.5초로 변경
+                attacker.reloadTimer = 0.5; attacker.reloadType = 'awp'; 
+                
                 attacker.vx = -attacker.facing * 800; 
                 return; 
             }
             else if(attacker.gunActive && attacker.gunClip > 0) { 
                 attacker.gunClip--; let lv = attacker.skillLevels['gun'] || 1;
                 projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 3000, vy: 0, width: 15, height: 4, owner: attacker, type: 'gun', color: '#60a5fa', level: lv }); 
-                if(attacker.gunClip <= 0) { attacker.reloadTimer = 2.0; attacker.reloadType = 'gun'; } 
+                
+                // ★ 수정: 건법 장전 속도를 1.0초로 변경
+                if(attacker.gunClip <= 0) { attacker.reloadTimer = 1.0; attacker.reloadType = 'gun'; } 
+                
                 attacker.vx = -attacker.facing * 300; 
                 return; 
             }
@@ -874,7 +881,7 @@
 
             drawBackground();
             
-            // ★ 잔상(Trail) 렌더링 로직 추가 (캐릭터보다 먼저 그려져야 등 뒤에 깔립니다)
+            // 잔상(Trail) 렌더링
             for (let i = trails.length - 1; i >= 0; i--) {
                 let t = trails[i];
                 t.life -= dt * 4.0; // 잔상이 사라지는 속도 (0.25초 만에 사라짐)
@@ -925,11 +932,9 @@
                     myPlayer.state = 'jump'; 
                 }
                 if((keys.s || mouse.rightClick) && myPlayer.state === 'idle' && myPlayer.y >= groundY - myPlayer.height) { 
-                    // ★ 대시 속도 대폭 증가 (빠른 버스트) 
-                    // (update 함수 안의 강한 마찰력과 결합되어 이동 거리는 기존의 1/2이 됩니다)
                     if(!gunReloading) { 
                         myPlayer.state = 'slide'; 
-                        myPlayer.stateTimer = 0.2; // 무적 시간 유지
+                        myPlayer.stateTimer = 0.2; 
                         myPlayer.invul = true; 
                         myPlayer.vx = myPlayer.facing * 1200; 
                         mouse.rightClick = false; 
