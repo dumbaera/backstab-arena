@@ -2,127 +2,166 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Backstab Arena - Assassin Edition</title>
-    <script src="/socket.io/socket.io.js"></scㅁript>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Backstab Arena (Full Version)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { margin: 0; background-color: #1a1a1a; color: white; font-family: 'Arial', sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #login-screen { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; border: 2px solid #c0392b; text-align: center; }
-        input { padding: 10px; margin: 5px; border-radius: 5px; border: none; width: 200px; }
-        button { padding: 10px 20px; margin: 10px; cursor: pointer; border-radius: 5px; border: none; font-weight: bold; }
-        .btn-login { background-color: #c0392b; color: white; }
-        .btn-signup { background-color: #7f8c8d; color: white; }
-        canvas { background-color: #2c3e50; border: 5px solid #34495e; display: none; }
-        #ui { position: absolute; top: 20px; left: 20px; display: none; pointer-events: none; }
-        .stat-box { background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 18px; }
+        body { margin: 0; overflow: hidden; background-color: #0f172a; color: white; touch-action: none; font-family: 'Segoe UI', sans-serif; }
+        #gameCanvas { display: block; width: 100%; height: 100vh; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: background 0.3s; }
+        #serverStatus { position: absolute; top: 10px; left: 10px; padding: 5px 10px; background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 12px; z-index: 100; border: 1px solid rgba(255,255,255,0.2); }
+        
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #waitingScreen { background:rgba(0,0,0,0.8); display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 50; }
+        #lobbyScreen { display:none; background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%); flex-direction:column; justify-content:center; align-items:center; z-index: 40; }
+        #inGameUI { pointer-events:none; display:none; flex-direction:column; justify-content:space-between; padding: 1rem; z-index: 30; }
+        #messageOverlay { background:rgba(0,0,0,0.8); display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 90; }
+        #gachaScreen, #equipScreen, #upgradeScreen { display:none; background:rgba(15, 23, 42, 0.95); flex-direction:column; align-items:center; justify-content:center; z-index: 60; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .cooldown-overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.6); }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(31, 41, 55, 0.5); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(75, 85, 99, 0.8); border-radius: 4px; }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
 
-    <div id="login-screen">
-        <h1>BACKSTAB ARENA</h1>
-        <p>암살자의 전장에 오신 것을 환영합니다.</p>
-        <input type="text" id="username" placeholder="아이디"><br>
-        <input type="password" id="password" placeholder="비밀번호"><br>
-        <button class="btn-login" onclick="login()">로그인</button>
-        <button class="btn-signup" onclick="signup()">새 계정 생성하기</button>
-    </div>
+    <div id="serverStatus" class="pointer-events-auto text-yellow-400 border border-yellow-500">서버 접속 중...</div>
 
-    <div id="ui">
-        <div class="stat-box">
-            👤 <span id="display-name">---</span> | 💰 GOLD: <span id="display-gold">0</span>
+    <canvas id="gameCanvas"></canvas>
+    <div id="visionOverlay"></div>
+
+    <!-- ★ 로그인 화면 -->
+    <div id="loginScreen" class="ui-layer pointer-events-auto fade-in flex flex-col justify-center items-center" style="background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%); z-index: 45;">
+        <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500 mb-8 tracking-widest text-center drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+            BACKSTAB<br><span class="text-4xl text-white drop-shadow-none">ARENA</span>
+        </h1>
+        <div class="bg-gray-800/80 backdrop-blur-md p-8 rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-gray-600 flex flex-col gap-4 w-80">
+            <h2 class="text-2xl font-bold text-white text-center mb-2">서버 로그인</h2>
+            
+            <input type="text" id="inputId" placeholder="아이디 (ID)" class="p-3 rounded bg-gray-900 border border-gray-700 text-white outline-none focus:border-blue-500 transition">
+            <input type="password" id="inputPw" placeholder="비밀번호 (Password)" class="p-3 rounded bg-gray-900 border border-gray-700 text-white outline-none focus:border-blue-500 transition">
+            
+            <button onclick="attemptLogin()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition shadow-lg mt-4">로그인</button>
+            <div class="flex items-center justify-between mt-2">
+                <hr class="w-full border-gray-600">
+                <span class="px-3 text-sm text-gray-400">OR</span>
+                <hr class="w-full border-gray-600">
+            </div>
+            <button onclick="attemptRegister()" class="bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg font-bold transition shadow-lg">새 계정 생성하기</button>
         </div>
     </div>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <!-- ★ 로비 화면 -->
+    <div id="lobbyScreen" class="ui-layer pointer-events-auto fade-in">
+        <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500 mb-8 tracking-widest text-center drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+            BACKSTAB<br><span class="text-4xl text-white drop-shadow-none">ARENA</span>
+        </h1>
+        
+        <div class="flex gap-4 mb-8">
+            <div class="bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg text-center border border-gray-600 shadow-xl">
+                <p class="text-gray-400 text-sm">보유 재화</p>
+                <p class="text-2xl font-bold text-yellow-400 drop-shadow-md" id="currencyDisplay">0</p>
+            </div>
+            <div class="bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg text-center border border-gray-600 shadow-xl">
+                <p class="text-gray-400 text-sm">전적</p>
+                <p class="text-xl font-bold"><span id="winDisplay" class="text-blue-400">0</span>승 <span id="lossDisplay" class="text-red-400">0</span>패</p>
+            </div>
+        </div>
 
-    <script>
-        const socket = io();
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const loginScreen = document.getElementById('login-screen');
-        const ui = document.getElementById('ui');
+        <div class="flex flex-col gap-4 w-64">
+            <button onclick="startAiGame()" class="bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 hover:to-purple-700 text-white py-3 rounded-lg font-bold text-lg transition shadow-[0_0_15px_rgba(168,85,247,0.5)]">AI 대전 시작</button>
+            <button onclick="joinGame()" class="bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white py-3 rounded-lg font-bold text-lg transition shadow-[0_0_15px_rgba(220,38,38,0.5)]">온라인 매칭 시작</button>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="showGacha()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition shadow-lg border border-blue-500/50">기술 뽑기</button>
+                <button onclick="showUpgrade()" class="bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-bold transition shadow-lg border border-orange-500/50">강화소</button>
+            </div>
+            <button onclick="showEquip()" class="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-bold text-lg transition shadow-lg border border-emerald-500/50">기술 장착</button>
+        </div>
+        
+        <p class="mt-8 text-gray-400 text-sm max-w-md text-center leading-relaxed bg-gray-900/50 p-4 rounded-lg border border-gray-700/50">
+            <strong class="text-white text-base">조작키 안내</strong><br><br>
+            <span class="text-blue-300">W / 스페이스바</span> (점프)<br>
+            <span class="text-blue-300">A, D</span> (좌우 이동)<br>
+            <span class="text-blue-300">S / 우클릭</span> (슬라이딩, 무적)<br>
+            <span class="text-red-300">마우스 좌클릭</span> (공격 - 평타 쿨타임 1초)<br>
+            <span class="text-yellow-300">숫자 1, 2, 3</span> (스킬 사용)
+        </p>
+    </div>
 
-        let myData = null;
-        let players = {};
+    <!-- 뽑기 화면 -->
+    <div id="gachaScreen" class="ui-layer pointer-events-auto fade-in">
+        <h2 class="text-4xl font-bold mb-4 text-white drop-shadow-md">기술 뽑기</h2>
+        <p class="mb-8 text-lg">1회 비용: <span class="text-yellow-400 font-bold">1</span> 재화</p>
+        <div class="bg-gray-800/80 backdrop-blur-md p-6 rounded-xl mb-8 text-center max-w-sm w-full min-h-[180px] flex items-center justify-center border-2 border-transparent shadow-[0_0_30px_rgba(0,0,0,0.5)]" id="gachaResultBox">
+            <p class="text-gray-400 text-lg">결과가 여기에 표시됩니다</p>
+        </div>
+        <div class="flex gap-4">
+            <button onclick="drawGacha()" class="bg-blue-600 hover:bg-blue-700 py-3 px-8 rounded-lg font-bold text-xl shadow-lg transition hover:scale-105">1회 뽑기</button>
+            <button onclick="hideGacha()" class="bg-gray-600 hover:bg-gray-700 py-3 px-8 rounded-lg font-bold text-xl shadow-lg transition">돌아가기</button>
+        </div>
+    </div>
 
-        // 1. 회원가입 및 로그인 로직
-        function signup() {
-            const id = document.getElementById('username').value;
-            const pw = document.getElementById('password').value;
-            // 초기 재화를 0으로 설정하여 서버에 전송
-            socket.emit('signup', { id, pw, initialData: { gold: 0, wins: 0 } });
-        }
+    <!-- 스킬 강화소 화면 -->
+    <div id="upgradeScreen" class="ui-layer pointer-events-auto p-8 fade-in overflow-y-auto">
+        <h2 class="text-4xl font-bold mb-2 text-orange-400 drop-shadow-md">스킬 강화소</h2>
+        <p class="mb-8 text-gray-300">중복으로 획득한 스킬 조각을 모아 스킬의 한계를 돌파하세요!<br><span class="text-sm text-gray-500">(Lv.2 필요 조각: 1개 / Lv.3 필요 조각: 2개)</span></p>
+        <div class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="upgradeListContainer"></div>
+        <button onclick="hideUpgrade()" class="mt-8 bg-gray-600 hover:bg-gray-700 py-3 px-10 rounded-lg font-bold text-xl shadow-lg transition">로비로 돌아가기</button>
+    </div>
 
-        function login() {
-            const id = document.getElementById('username').value;
-            const pw = document.getElementById('password').value;
-            socket.emit('login', { id, pw });
-        }
+    <!-- 기술 장착 화면 -->
+    <div id="equipScreen" class="ui-layer pointer-events-auto p-8 fade-in overflow-y-auto">
+        <h2 class="text-4xl font-bold mb-8 drop-shadow-md">기술 장착</h2>
+        <div class="w-full max-w-3xl">
+            <h3 class="text-xl mb-2 text-yellow-400 font-bold">장착된 기술 (최대 3개)</h3>
+            <div id="equippedSkills" class="flex gap-4 mb-8 bg-gray-800/80 p-6 rounded-xl min-h-[100px] shadow-lg border border-gray-700"></div>
+            <h3 class="text-xl mb-2 font-bold">보유한 기술</h3>
+            <div id="inventorySkills" class="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-800/80 p-6 rounded-xl max-h-96 overflow-y-auto shadow-lg border border-gray-700"></div>
+        </div>
+        <button onclick="hideEquip()" class="mt-8 bg-gray-600 hover:bg-gray-700 py-3 px-10 rounded-lg font-bold text-xl shadow-lg transition">저장 및 돌아가기</button>
+    </div>
 
-        socket.on('loginSuccess', (data) => {
-            myData = data;
-            loginScreen.style.display = 'none';
-            canvas.style.display = 'block';
-            ui.style.display = 'block';
-            document.getElementById('display-name').innerText = myData.id;
-            document.getElementById('display-gold').innerText = myData.gold || 0;
-            gameLoop();
-        });
+    <!-- 대기 화면 -->
+    <div id="waitingScreen" class="ui-layer pointer-events-auto">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-red-500 mb-4"></div>
+        <h2 class="text-3xl font-bold text-white drop-shadow-md">상대방을 기다리는 중...</h2>
+        <p class="text-gray-400 mt-2 text-lg">새 창을 열거나 친구를 초대하세요!</p>
+    </div>
 
-        socket.on('error', (msg) => alert(msg));
+    <!-- 인게임 UI -->
+    <div id="inGameUI" class="ui-layer">
+        <div class="flex justify-between items-start w-full max-w-4xl mx-auto pointer-events-auto">
+            <div class="w-1/3">
+                <p class="font-bold mb-1 drop-shadow-md"><span id="myHpName" class="text-blue-300">나 (Player)</span> <span id="p1HpText" class="text-sm font-normal text-gray-300">500 / 500</span></p>
+                <div class="w-full bg-gray-900 h-5 rounded border border-gray-600 overflow-hidden shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+                    <div id="p1HpBar" class="bg-gradient-to-r from-blue-600 to-blue-400 h-full w-full transition-all duration-200"></div>
+                </div>
+                <div id="p1Debuffs" class="flex gap-1 mt-1 text-xs text-yellow-400 font-bold drop-shadow-md"></div>
+            </div>
+            <div class="flex flex-col items-center">
+                <div id="timeDisplay" class="text-4xl font-mono font-bold mt-1 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">00:00</div>
+                <div id="bossAnnouncement" class="text-red-500 font-bold text-lg mt-2 animate-pulse h-6 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]"></div>
+            </div>
+            <div class="w-1/3 text-right">
+                <p class="font-bold mb-1 drop-shadow-md"><span id="p2HpText" class="text-sm font-normal text-gray-300">500 / 500</span> <span id="enemyNameDisplay" class="text-red-400">상대방 (Enemy)</span></p>
+                <div class="w-full bg-gray-900 h-5 rounded border border-gray-600 overflow-hidden flex justify-end shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+                    <div id="p2HpBar" class="bg-gradient-to-l from-red-600 to-red-400 h-full w-full transition-all duration-200"></div>
+                </div>
+                <div id="p2Debuffs" class="flex gap-1 mt-1 justify-end text-xs text-yellow-400 font-bold drop-shadow-md"></div>
+            </div>
+        </div>
 
-        // 2. 캐릭터 모델링 그리기 함수 (암살자 스타일)
-        function drawPlayer(x, y, name, isMe) {
-            ctx.save();
-            ctx.translate(x, y);
-
-            // [몸통 - 어두운 암살자 망토]
-            ctx.fillStyle = isMe ? '#2980b9' : '#c0392b'; 
-            ctx.fillRect(-15, -15, 30, 30); 
-
-            // [머리]
-            ctx.beginPath();
-            ctx.arc(0, -15, 12, 0, Math.PI * 2);
-            ctx.fillStyle = '#f1c27d'; 
-            ctx.fill();
-            ctx.closePath();
-
-            // [눈매 - 닌자 복면 띠]
-            ctx.fillStyle = '#333';
-            ctx.fillRect(-12, -20, 24, 6);
-            ctx.fillStyle = 'red'; // 매서운 눈
-            ctx.fillRect(-6, -18, 2, 2);
-            ctx.fillRect(4, -18, 2, 2);
-
-            // [무기 - 은빛 단검]
-            ctx.fillStyle = '#bdc3c7'; // 칼날
-            ctx.beginPath();
-            ctx.moveTo(15, 0);
-            ctx.lineTo(35, 0);
-            ctx.lineTo(15, 8);
-            ctx.fill();
-            ctx.fillStyle = '#7f8c8d'; // 칼자루
-            ctx.fillRect(10, -2, 6, 12);
-
-            // 이름 표시
-            ctx.fillStyle = "white";
-            ctx.font = "12px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(name, 0, -35);
-
-            ctx.restore();
-        }
-
-        // 3. 게임 루프
-        function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 여기에 플레이어 이동 및 소켓 업데이트 로직 추가 가능
-            // 임시로 내 캐릭터 그리기
-            drawPlayer(canvas.width/2, canvas.height/2, myData.id, true);
-
-            requestAnimationFrame(gameLoop);
-        }
-    </script>
-</body>
-</html>
+        <div class="flex justify-center gap-4 mb-8 pointer-events-auto">
+            <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI1">
+                <span id="skillName1" class="z-10">Skill 1</span><span id="skillLv1" class="text-[10px] text-orange-300 z-10">Lv.1</span>
+                <div id="skillCool1" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">1</div>
+            </div>
+            <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI2">
+                <span id="skillName2" class="z-10">Skill 2</span><span id="skillLv2" class="text-[10px] text-orange-300 z-10">Lv
