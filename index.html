@@ -677,11 +677,24 @@
         function joinGame() { isAiMode = false; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('waitingScreen').style.display = 'flex'; socket.emit('joinQueue'); }
         function startAiGame() { isAiMode = true; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('inGameUI').style.display = 'block'; document.getElementById('serverStatus').innerText = "AI 싱글플레이 모드"; document.getElementById('serverStatus').className = "pointer-events-auto text-purple-400 border border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"; initRound(); }
 
-        function resize() { width = window.innerWidth || 800; height = window.innerHeight || 600; canvas.width = width; canvas.height = height; groundY = height - 120; }
+        function resize() { 
+            width = window.innerWidth || 800; 
+            height = window.innerHeight || 600; 
+            canvas.width = width; 
+            canvas.height = height; 
+            groundY = height - 120; 
+            
+            // ★ 수정: 브라우저 크기를 변경할 때마다 플레이어가 바닥 아래로 떨어지지 않도록 위치 보정
+            if (myPlayer) myPlayer.y = Math.min(myPlayer.y, groundY - myPlayer.height);
+            if (enemyPlayer) enemyPlayer.y = Math.min(enemyPlayer.y, groundY - enemyPlayer.height);
+        }
         window.addEventListener('resize', resize);
 
         function initRound() {
-            resize(); let p1 = new Player(width * 0.2, true); let p2 = new Player(width * 0.8, false);
+            // ★ 수정: 게임 시작 시 시간 초과 방지를 위해 timeElapsed를 명시적으로 0으로 초기화
+            matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false }; 
+            resize(); 
+            let p1 = new Player(width * 0.2, true); let p2 = new Player(width * 0.8, false);
             p1.y = groundY - p1.height; p2.y = groundY - p2.height;
             
             if(isAiMode) {
@@ -707,7 +720,7 @@
                 } else { document.getElementById(`skillName${i+1}`).innerText = '-'; document.getElementById(`skillLv${i+1}`).innerText = ''; document.getElementById(`skillUI${i+1}`).style.borderColor = '#4b5563'; } 
             }
 
-            matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false }; projectiles = []; particles = []; entities = []; gameState = 'playing'; 
+            projectiles = []; particles = []; entities = []; gameState = 'playing'; 
             if (gameLoopId) cancelAnimationFrame(gameLoopId); gameLoopId = requestAnimationFrame(gameLoop);
         }
 
