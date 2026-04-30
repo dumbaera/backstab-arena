@@ -93,7 +93,7 @@
             <strong class="text-white text-base">조작키 안내</strong><br><br>
             <span class="text-blue-300">W / 스페이스바</span> (점프)<br>
             <span class="text-blue-300">A, D</span> (좌우 이동)<br>
-            <span class="text-blue-300">S / 우클릭</span> (슬라이딩, 무적)<br>
+            <span class="text-blue-300">S / 우클릭</span> (짧은 슬라이딩 대시, 무적)<br>
             <span class="text-red-300">마우스 좌클릭</span> (공격 - 평타 쿨타임 1초)<br>
             <span class="text-yellow-300">숫자 1, 2, 3</span> (스킬 사용)
         </p>
@@ -164,7 +164,7 @@
             </div>
         </div>
 
-        <!-- 하단 바 영역 (스킬 & 평타 쿨타임 바) -->
+        <!-- 하단 바 영역 (스킬 & 평타 쿨타임 바를 화면 최하단에 완벽 고정) -->
         <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center w-full max-w-md pointer-events-auto">
             <div class="flex justify-center gap-4 mb-3">
                 <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI1">
@@ -457,7 +457,6 @@
 
                 let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && Math.abs(this.vx) > 10);
                 
-                // 달리기 보폭 속도 계산 (속도가 빨라진 만큼 보폭도 맞춰줌)
                 let cycle = isRunning ? this.x * 0.08 : 0;
                 let armSwing = isRunning ? Math.sin(cycle) * 25 : 0;
 
@@ -734,7 +733,6 @@
                 caster.stateTimer = 0.3;
             }
 
-            // ★ 투사체 마법 속도 2배 증가 (600 -> 1200)
             switch(skillId) {
                 case 'slow': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#60a5fa', level: lv }); break;
                 case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
@@ -749,7 +747,6 @@
                 case 'awp': caster.awpActive = true; caster.gunActive = false; caster.awpClip = 5 + (lv-1); caster.reloadTimer = 0; break; 
                 case 'god': caster.godMode = true; setTimeout(() => { caster.godMode = false; }, 5000 + lv*2000); break;
                 case 'shorten': if(isAiMode || !isRemote) matchState.timeElapsed += 60; break;
-                // ★ 포탄 떨어지는 속도 2배 증가 (800 -> 1600)
                 case 'bombard': let bombCount = 2 + lv; for(let i=0; i<bombCount; i++) { setTimeout(() => { projectiles.push({ x: target.x + (Math.random()*150 - 75), y: -50, vx: 0, vy: 1600, width: 20+lv*5, height: 40, owner: caster, type: 'bomb', color: '#f87171', level: lv }); }, i * 250); } break;
                 case 'mine': entities.push({ x: caster.x + caster.width/2 - 15, y: groundY - 10, width: 30 + (lv-1)*10, height: 10, owner: caster, type: 'mine', level: lv }); break;
                 case 'deathnote': if(target === myPlayer || isAiMode) target.applyDamage(70 + lv*30); createParticles(target.x, target.y, '#000000', 40); break;
@@ -768,19 +765,18 @@
             attacker.state = 'attack'; attacker.stateTimer = 0.3;
             if(!isRemote && !isAiMode) myPlayer.lastAction = { type: 'attack', id: null, ts: Date.now() };
 
-            // ★ 총알 속도 및 넉백(반동) 거리 2배 증가
             if(attacker.awpActive && attacker.awpClip > 0) { 
                 attacker.awpClip--; let lv = attacker.skillLevels['awp'] || 1;
                 projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 6000, vy: 0, width: 40, height: 4, owner: attacker, type: 'awp', color: '#ef4444', level: lv }); 
                 attacker.reloadTimer = 1.0; attacker.reloadType = 'awp'; 
-                attacker.vx = -attacker.facing * 800; // 반동 2배
+                attacker.vx = -attacker.facing * 800; 
                 return; 
             }
             else if(attacker.gunActive && attacker.gunClip > 0) { 
                 attacker.gunClip--; let lv = attacker.skillLevels['gun'] || 1;
                 projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 3000, vy: 0, width: 15, height: 4, owner: attacker, type: 'gun', color: '#60a5fa', level: lv }); 
                 if(attacker.gunClip <= 0) { attacker.reloadTimer = 2.0; attacker.reloadType = 'gun'; } 
-                attacker.vx = -attacker.facing * 300; // 반동 2배
+                attacker.vx = -attacker.facing * 300; 
                 return; 
             }
 
@@ -797,7 +793,6 @@
                     else { userData.losses++; showMessage("LOSE", "등을 내어주었습니다..."); }
                     saveData();
                 } else { 
-                    // ★ 피격 시 밀려나는 거리 2배 증가 (600 -> 1200)
                     if(target === myPlayer || isAiMode) { target.vx = attacker.facing * 1200; target.applyDamage(5); }
                     createParticles(target.x + target.width/2, target.y + target.height/2, '#60a5fa', 15);
                 }
@@ -817,7 +812,6 @@
 
             enemyPlayer.facing = dx > 0 ? 1 : -1;
             
-            // ★ AI 최고 속도 2배 증가 (280 -> 560)
             if(moveX !== 0 && enemyPlayer.state !== 'slide') {
                 let targetVx = moveX * 560 * enemyPlayer.speedMult;
                 enemyPlayer.vx += (targetVx - enemyPlayer.vx) * 12 * dt;
@@ -882,7 +876,6 @@
                 let currentSpeedMult = gunReloading ? myPlayer.speedMult * 0.5 : myPlayer.speedMult; 
                 
                 if(moveX !== 0 && myPlayer.state !== 'slide') { 
-                    // ★ 유저 최고 속도 2배 증가 (350 -> 700)
                     let targetVx = moveX * 700 * currentSpeedMult;
                     myPlayer.vx += (targetVx - myPlayer.vx) * 12 * dt; 
                     myPlayer.facing = moveX; 
@@ -893,8 +886,14 @@
                     myPlayer.state = 'jump'; 
                 }
                 if((keys.s || mouse.rightClick) && myPlayer.state === 'idle' && myPlayer.y >= groundY - myPlayer.height) { 
-                    // ★ 슬라이딩 속도 2배 증가 (550 -> 1100)
-                    if(!gunReloading) { myPlayer.state = 'slide'; myPlayer.stateTimer = 0.45; myPlayer.invul = true; myPlayer.vx = myPlayer.facing * 1100; mouse.rightClick = false; }
+                    // ★ 슬라이딩 체공 시간과 속도 감소 (짧고 굵게!)
+                    if(!gunReloading) { 
+                        myPlayer.state = 'slide'; 
+                        myPlayer.stateTimer = 0.2; 
+                        myPlayer.invul = true; 
+                        myPlayer.vx = myPlayer.facing * 800; 
+                        mouse.rightClick = false; 
+                    }
                 }
                 
                 if(mouse.click) { executeAttack(myPlayer); mouse.click = false; }
