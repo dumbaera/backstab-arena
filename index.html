@@ -447,7 +447,8 @@
                 let primaryColor = this.isP1 ? '#3b82f6' : '#ef4444'; 
                 let secondaryColor = this.isP1 ? '#1e3a8a' : '#7f1d1d'; 
 
-                ctx.save();
+                // ★ 매우 중요한 좌표 저장점! 이 저장점(save)이 끝에서 꼭 복구(restore)되어야 화면이 안 날아갑니다.
+                ctx.save(); 
                 ctx.translate(this.x + this.width/2, this.y + this.height/2);
                 if(this.invul || this.godMode) ctx.globalAlpha = 0.5;
 
@@ -462,7 +463,7 @@
                 let cycle = isRunning ? this.x * 0.06 : 0;
                 let armSwing = isRunning ? Math.sin(cycle) * 20 : 0;
 
-                // ★ 상태 변수 세팅 (사격, 마법, 평타 구분)
+                // 상태 변수 세팅 (사격, 마법, 평타 구분)
                 let isShooting = (this.state === 'attack' && (this.gunActive || this.awpActive));
                 let isCasting = (this.state === 'cast');
                 let isMelee = (this.state === 'attack' && !this.gunActive && !this.awpActive);
@@ -518,11 +519,11 @@
 
                 ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(0, -28, 13, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = '#ffffff'; ctx.shadowColor = primaryColor; ctx.shadowBlur = 10; ctx.beginPath(); ctx.roundRect(this.facing * 5 - 6, -32, 12, 6, 3); ctx.fill(); ctx.shadowBlur = 0;
+                ctx.restore();
 
                 // ==========================================
                 // 4. 중간 앞에 있는 레이어: 앞 다리 (Front Leg)
                 // ==========================================
-                ctx.restore(); // 다리는 기울어지면 안 되므로 기울기 해제
                 ctx.lineWidth = 8; ctx.strokeStyle = primaryColor;
                 if (this.state === 'jump') {
                     ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(15 * this.facing, 20); ctx.lineTo(10 * this.facing, 35); ctx.stroke();
@@ -603,13 +604,17 @@
 
                 ctx.restore(); // 팔 기울기 해제
 
-                // 근접 공격 이펙트 (맨 마지막에 덮어 그림)
+                // 근접 공격 이펙트 (이미 translate가 되어있으므로 바로 그림)
                 if(isMelee) {
-                    ctx.save(); ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                    ctx.save(); 
                     ctx.shadowColor = primaryColor; ctx.shadowBlur = 20; ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                     ctx.beginPath(); ctx.arc(this.facing * 20, 0, 35, -Math.PI/2.5, Math.PI/2.5, this.facing===-1); ctx.lineTo(this.facing * 10, 0); ctx.fill();
                     ctx.restore();
                 }
+
+                // ★ 맨 처음에 열어두었던 전체 캔버스 설정(translate)을 원래대로 돌려놓습니다.
+                // 이 줄이 있어야 캐릭터가 화면 밖으로 날아가지 않습니다!
+                ctx.restore(); 
             }
         }
 
@@ -684,14 +689,14 @@
             canvas.height = height; 
             groundY = height - 120; 
             
-            // ★ 수정: 브라우저 크기를 변경할 때마다 플레이어가 바닥 아래로 떨어지지 않도록 위치 보정
+            // 브라우저 크기를 변경할 때마다 플레이어가 바닥 아래로 떨어지지 않도록 위치 보정
             if (myPlayer) myPlayer.y = Math.min(myPlayer.y, groundY - myPlayer.height);
             if (enemyPlayer) enemyPlayer.y = Math.min(enemyPlayer.y, groundY - enemyPlayer.height);
         }
         window.addEventListener('resize', resize);
 
         function initRound() {
-            // ★ 수정: 게임 시작 시 시간 초과 방지를 위해 timeElapsed를 명시적으로 0으로 초기화
+            // 게임 시작 시 시간 초과 방지를 위해 timeElapsed를 명시적으로 0으로 초기화
             matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false }; 
             resize(); 
             let p1 = new Player(width * 0.2, true); let p2 = new Player(width * 0.8, false);
@@ -741,8 +746,7 @@
         function useSkill(caster, skillId, isRemote = false) {
             let target = caster === myPlayer ? enemyPlayer : myPlayer; let dir = caster.facing; let lv = caster.skillLevels[skillId] || 1;
 
-            // ★ 캐스팅(마법) 애니메이션 상태 부여 
-            // (총기 장착이나 단순 이동기가 아닐 때만 마법을 쓰는 포즈를 취합니다)
+            // 캐스팅(마법) 애니메이션 상태 부여 
             if (!['gun', 'awp', 'teleport', 'front_tp', 'tiger', 'distance'].includes(skillId)) {
                 caster.state = 'cast'; 
                 caster.stateTimer = 0.3;
@@ -784,7 +788,7 @@
                 attacker.awpClip--; let lv = attacker.skillLevels['awp'] || 1;
                 projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 3000, vy: 0, width: 40, height: 4, owner: attacker, type: 'awp', color: '#ef4444', level: lv }); 
                 attacker.reloadTimer = 1.0; attacker.reloadType = 'awp'; 
-                // ★ 저격총(에땁) 사격 시 강한 반동 (넉백)
+                // 저격총(에땁) 사격 시 강한 반동 (넉백)
                 attacker.vx = -attacker.facing * 400; 
                 return; 
             }
@@ -792,7 +796,7 @@
                 attacker.gunClip--; let lv = attacker.skillLevels['gun'] || 1;
                 projectiles.push({ x: attacker.x + (attacker.facing === 1 ? attacker.width : 0), y: attacker.y + 30, vx: attacker.facing * 1500, vy: 0, width: 15, height: 4, owner: attacker, type: 'gun', color: '#60a5fa', level: lv }); 
                 if(attacker.gunClip <= 0) { attacker.reloadTimer = 2.0; attacker.reloadType = 'gun'; } 
-                // ★ 권총 사격 시 가벼운 반동 (넉백)
+                // 권총 사격 시 가벼운 반동 (넉백)
                 attacker.vx = -attacker.facing * 150; 
                 return; 
             }
