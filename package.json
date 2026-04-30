@@ -1,21 +1,14 @@
 {
   "name": "backstab-server",
   "version": "1.0.0",
-  "dependencies": {
-  "express": "^4.21.0",
-  "socket.io": "^4.7.2",
-  "mongoose": "^8.2.0"
-},
-  "main": "index.js",
+  "description": "Backstab Arena Multiplayer Server",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "express": "^5.2.1",
-    "socket.io": "^4.8.3"
+    "express": "^4.21.0",
+    "socket.io": "^4.7.2",
+    "mongoose": "^8.2.0"
   }
 }
