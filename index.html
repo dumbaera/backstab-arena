@@ -96,7 +96,7 @@
             <span class="text-blue-300">W / 스페이스바</span> (점프)<br>
             <span class="text-blue-300">A, D</span> (좌우 이동)<br>
             <span class="text-blue-300">S / 우클릭</span> (대시 회피기 - 적 공격 직전 사용 시 패링 스턴!)<br>
-            <span class="text-red-300">마우스 좌클릭</span> (공격 - 0.5초 딜레이, 평타 쿨타임 1초)<br>
+            <span class="text-red-300">마우스 좌클릭</span> (공격 - 0.2초 딜레이, 평타 쿨타임 1초)<br>
             <span class="text-yellow-300">숫자 1, 2, 3</span> (스킬 사용)
         </p>
     </div>
@@ -173,14 +173,17 @@
                 <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI1">
                     <span id="skillName1" class="z-10">Skill 1</span><span id="skillLv1" class="text-[10px] text-orange-300 z-10">Lv.1</span>
                     <div id="skillCool1" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">1</div>
+                    <div id="skillCdText1" class="absolute inset-0 flex items-center justify-center text-2xl font-black text-white z-20 drop-shadow-[0_0_8px_rgba(0,0,0,1)]" style="display:none;"></div>
                 </div>
                 <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI2">
                     <span id="skillName2" class="z-10">Skill 2</span><span id="skillLv2" class="text-[10px] text-orange-300 z-10">Lv.1</span>
                     <div id="skillCool2" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">2</div>
+                    <div id="skillCdText2" class="absolute inset-0 flex items-center justify-center text-2xl font-black text-white z-20 drop-shadow-[0_0_8px_rgba(0,0,0,1)]" style="display:none;"></div>
                 </div>
                 <div class="relative w-16 h-16 bg-gray-900/80 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center text-xs text-center font-bold shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-sm" id="skillUI3">
                     <span id="skillName3" class="z-10">Skill 3</span><span id="skillLv3" class="text-[10px] text-orange-300 z-10">Lv.1</span>
                     <div id="skillCool3" class="cooldown-overlay rounded-xl h-0 transition-all duration-100"></div><div class="absolute -top-6 text-gray-300 font-bold drop-shadow-md text-sm">3</div>
+                    <div id="skillCdText3" class="absolute inset-0 flex items-center justify-center text-2xl font-black text-white z-20 drop-shadow-[0_0_8px_rgba(0,0,0,1)]" style="display:none;"></div>
                 </div>
             </div>
             
@@ -433,7 +436,6 @@
                 if(matchState.horonActive) amount *= 1.5;
                 this.hp -= amount;
                 
-                // ★ 버그 수정: 체력이 소수점으로 떨어져 0이 되지 않던 무한 생존 버그 픽스
                 if(this.hp < 1) this.hp = 0; 
                 
                 if(this.hp <= 0 && this.revive) { 
@@ -457,10 +459,11 @@
                 if(this === myPlayer) {
                     const overlay = document.getElementById('visionOverlay');
                     if(hpRatio < 0.5) { 
-                        let blurPx = (0.5 - hpRatio) * 12;
+                        // ★ 블러 및 붉은색 강도를 완화
+                        let blurPx = (0.5 - hpRatio) * 6; 
                         overlay.style.backdropFilter = `blur(${blurPx}px)`;
                         overlay.style.webkitBackdropFilter = `blur(${blurPx}px)`;
-                        overlay.style.background = `rgba(220, 38, 38, ${(0.5 - hpRatio) * 0.3})`;
+                        overlay.style.background = `rgba(220, 38, 38, ${(0.5 - hpRatio) * 0.15})`;
                     } else {
                         overlay.style.backdropFilter = 'none';
                         overlay.style.webkitBackdropFilter = 'none';
@@ -491,7 +494,8 @@
                     let enemy = this === myPlayer ? enemyPlayer : myPlayer;
                     if (isAiMode && this === enemyPlayer) enemy = myPlayer;
 
-                    if (this.stateTimer <= 0.2 && this.stateTimer > 0) {
+                    // ★ 패링(완벽한 회피) 구간을 남은 시간 0.1초 이하일 때로 타이트하게 조정
+                    if (this.stateTimer <= 0.1 && this.stateTimer > 0) {
                         if (enemy && enemy.state === 'slide') { 
                             let reach = 50; 
                             let hitX = this.facing === 1 ? this.x + this.width : this.x - reach;
@@ -514,7 +518,6 @@
                             if( hitX < enemy.x + enemy.width && hitX + reach > enemy.x && this.y < enemy.y + enemy.height && this.y + this.height > enemy.y) {
                                 if(!enemy.invul && !enemy.godMode) {
                                     if (this.facing === enemy.facing) {
-                                        // ★ 버그 수정: 등 공격 최소 데미지(30) 보장 및 현재 체력 비례
                                         enemy.applyDamage(Math.max(30, enemy.hp * 0.5));
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ef4444', 30);
                                     } else {
@@ -826,7 +829,6 @@
                 let keysArr = Object.keys(SKILL_DB);
                 enemyPlayer.skillLevels = {}; 
                 enemyPlayer.skills = [keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)]];
-                // ★ 버그 픽스: AI 스킬 레벨을 유저의 평균 스킬 레벨과 비슷하도록 강제로 1레벨로 고정
                 enemyPlayer.skills.forEach(s => enemyPlayer.skillLevels[s] = 1); 
             } else {
                 if(!myRole) myRole = 'p1'; if(myRole === 'p1') { myPlayer = p1; enemyPlayer = p2; } else { myPlayer = p2; enemyPlayer = p1; }
@@ -843,6 +845,11 @@
                     document.getElementById(`skillName${i+1}`).innerText = SKILL_DB[skillId].name; document.getElementById(`skillLv${i+1}`).innerText = `Lv.${lv}`; document.getElementById(`skillUI${i+1}`).style.borderColor = RANK_COLORS[SKILL_DB[skillId].rank]; document.getElementById(`skillUI${i+1}`).style.color = RANK_COLORS[SKILL_DB[skillId].rank]; 
                 } else { document.getElementById(`skillName${i+1}`).innerText = '-'; document.getElementById(`skillLv${i+1}`).innerText = ''; document.getElementById(`skillUI${i+1}`).style.borderColor = '#4b5563'; } 
             }
+
+            // ★ 라운드 시작 시 화면 블러 및 붉은 효과 완벽 초기화 (시야 감소 버그 수정)
+            document.getElementById('visionOverlay').style.backdropFilter = 'none';
+            document.getElementById('visionOverlay').style.webkitBackdropFilter = 'none';
+            document.getElementById('visionOverlay').style.background = 'none';
 
             projectiles = []; particles = []; entities = []; trails = []; 
             gameState = 'playing'; 
@@ -1011,8 +1018,9 @@
 
             if (isMelee) {
                 attacker.meleeCooldown = 1.0; 
+                // ★ 평타 딜레이 0.2초로 수정
                 attacker.state = 'attack_windup';
-                attacker.stateTimer = 0.5;
+                attacker.stateTimer = 0.2;
             }
         }
 
@@ -1188,8 +1196,7 @@
                         let isGun = p.type === 'gun' || p.type === 'awp';
                         let projFacing = p.vx > 0 ? 1 : -1;
                         if (isGun && projFacing === target.facing) {
-                            // ★ 버그 픽스: 투사체 등 공격 시에도 최소 데미지(30)를 보장하여 확실히 죽도록 처리
-                            target.applyDamage(Math.max(30, target.hp * 0.5));
+                            target.applyDamage(target.hp * 0.5);
                             createParticles(target.x + target.width/2, target.y + target.height/2, '#ef4444', 30);
                             projectiles.splice(i, 1);
                             continue;
@@ -1240,17 +1247,26 @@
             document.getElementById('p1HpBar').style.width = `${(myPlayer.hp/myPlayer.maxHp)*100}%`; document.getElementById('p1HpText').innerText = `${Math.floor(myPlayer.hp)} / ${myPlayer.maxHp}`;
             document.getElementById('p1Debuffs').innerText = myPlayer.speedMult < 1.0 ? '이속감소' : '';
             
-            // ★ 버그 픽스: 스킬 쿨타임 UI 연산에서 소수점 초과(100% 이상)나 음수 방지 처리
             for(let i=0; i<3; i++) { 
                 let cdRatio = 0; let skillId = myPlayer.skills[i]; 
-                if(skillId) {
+                let remainingCd = myPlayer.cooldowns[i];
+                if(skillId && skillId !== 'gun') {
                     let lv = myPlayer.skillLevels[skillId] || 1;
                     let maxCd = SKILL_DB[skillId].cd * (1.0 - ((lv-1)*0.15));
-                    cdRatio = myPlayer.cooldowns[i] / maxCd; 
+                    cdRatio = remainingCd / maxCd; 
                     if (cdRatio > 1) cdRatio = 1;
                     if (cdRatio < 0) cdRatio = 0;
                 }
                 document.getElementById(`skillCool${i+1}`).style.height = `${cdRatio * 100}%`; 
+                
+                // ★ 스킬 쿨타임 남은 시간 텍스트 표시
+                let cdTextEl = document.getElementById(`skillCdText${i+1}`);
+                if (remainingCd > 0 && skillId !== 'gun') {
+                    cdTextEl.style.display = 'flex';
+                    cdTextEl.innerText = Math.ceil(remainingCd);
+                } else {
+                    cdTextEl.style.display = 'none';
+                }
             }
             
             let meleeBar = document.getElementById('meleeCooldownBar');
