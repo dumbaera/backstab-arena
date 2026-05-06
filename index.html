@@ -144,7 +144,6 @@
     <!-- 인게임 UI -->
     <div id="inGameUI" class="ui-layer">
         
-        <!-- ★ UI 레이아웃 개선: 창이 좁아져도 겹치지 않게 w-1/4, w-2/4 비율로 분할 -->
         <div class="absolute top-4 left-0 w-full px-4 md:px-10 flex justify-between items-start pointer-events-auto">
             <div class="w-1/4">
                 <p class="font-bold mb-1 drop-shadow-md truncate"><span id="myHpName" class="text-blue-300">나 (Player)</span> <span id="p1HpText" class="text-sm font-normal text-gray-300">500 / 500</span></p>
@@ -214,7 +213,7 @@
 
         const SKILL_DB = {
             'slow': { id: 'slow', name: '슬로우', rank: '기본', cd: 8, desc: '적중시 3초간 속도 감소' },
-            'snare': { id: 'snare', name: '속박', rank: '기본', cd: 12, desc: '적중시 방향 전환/이동 불가' },
+            'snare': { id: 'snare', name: '속박', rank: '기본', cd: 12, desc: '적중시 0.5초간 방향 전환/이동 불가' },
             'teleport': { id: 'teleport', name: '순간이동', rank: '기본', cd: 5, desc: '바라보는 방향으로 이동' },
             'mission': { id: 'mission', name: '지령', rank: '초급', cd: 15, desc: '이동속도 증가 버프' },
             'bombard': { id: 'bombard', name: '호출', rank: '초급', cd: 20, desc: '하늘에서 포탄 투하' },
@@ -265,7 +264,6 @@
             updateLobbyUI(); 
         }
 
-        // ★ 멀티플레이 오류 해결: 논리적 해상도 고정 (모든 유저가 동일한 1600x900 좌표계를 사용)
         let socket, myRole = null, myPlayer = null, enemyPlayer = null, gameLoopId = null;
         let width = 1600, height = 900, groundY = 900 - 120;
         
@@ -365,7 +363,6 @@
                 
                 socket.on("enemyState", (data) => {
                     if(enemyPlayer && gameState === 'playing' && !isAiMode) {
-                        // 서버에서 넘어온 상대방의 절대 좌표를 화면에 그대로 그림
                         if (!isNaN(data.x) && !isNaN(data.y)) { enemyPlayer.x = data.x; enemyPlayer.y = data.y; }
                         enemyPlayer.state = data.state; enemyPlayer.facing = data.facing; enemyPlayer.hp = data.hp; enemyPlayer.invul = data.invul; 
                         enemyPlayer.skills = data.skills || []; 
@@ -436,7 +433,16 @@
                 if(matchState.horonActive) amount *= 1.5;
                 this.hp -= amount;
                 
-                if(this.hp < 0) this.hp = 0; 
+                // ★ 버그 수정: 체력이 소수점으로 떨어져 0이 되지 않던 무한 생존 버그 픽스
+                if(this.hp < 1) this.hp = 0; 
+                
+                if(this.hp <= 0 && this.revive) { 
+                    this.hp = 50; this.revive = false; 
+                    createParticles(this.x + this.width/2, this.y + this.height/2, '#eab308', 40); 
+                    this.updateDebuffs();
+                    return; 
+                }
+                
                 if(this.hp > this.maxHp) this.hp = this.maxHp;
                 
                 this.updateDebuffs();
@@ -508,7 +514,8 @@
                             if( hitX < enemy.x + enemy.width && hitX + reach > enemy.x && this.y < enemy.y + enemy.height && this.y + this.height > enemy.y) {
                                 if(!enemy.invul && !enemy.godMode) {
                                     if (this.facing === enemy.facing) {
-                                        enemy.applyDamage(enemy.hp * 0.5);
+                                        // ★ 버그 수정: 등 공격 최소 데미지(30) 보장 및 현재 체력 비례
+                                        enemy.applyDamage(Math.max(30, enemy.hp * 0.5));
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ef4444', 30);
                                     } else {
                                         enemy.vx = this.facing * 1200;
@@ -572,7 +579,7 @@
                 let breath = (this.state === 'idle') ? Math.sin(t) * 2 : 0; 
                 ctx.translate(0, breath);
 
-                let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && Math.abs(this.vx) > 10);
+                let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && this.state !== 'attack_windup' && Math.abs(this.vx) > 10);
                 
                 let cycle = isRunning ? this.x * 0.08 : 0;
                 let armSwing = isRunning ? Math.sin(cycle) * 25 : 0;
@@ -780,7 +787,6 @@
         function joinGame() { isAiMode = false; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('waitingScreen').style.display = 'flex'; socket.emit('joinQueue'); }
         function startAiGame() { isAiMode = true; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('inGameUI').style.display = 'block'; document.getElementById('serverStatus').innerText = "AI 싱글플레이 모드"; document.getElementById('serverStatus').className = "pointer-events-auto text-purple-400 border border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"; initRound(); }
 
-        // ★ 버그 수정: 논리 해상도를 고정하여 브라우저 크기 차이로 인한 공중부양 싱크 오류 완벽 해결
         function resize() { 
             let scale = Math.min(window.innerWidth / width, window.innerHeight / height);
             canvas.style.width = (width * scale) + 'px';
@@ -820,7 +826,8 @@
                 let keysArr = Object.keys(SKILL_DB);
                 enemyPlayer.skillLevels = {}; 
                 enemyPlayer.skills = [keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)]];
-                enemyPlayer.skills.forEach(s => enemyPlayer.skillLevels[s] = Math.floor(Math.random()*3)+1); 
+                // ★ 버그 픽스: AI 스킬 레벨을 유저의 평균 스킬 레벨과 비슷하도록 강제로 1레벨로 고정
+                enemyPlayer.skills.forEach(s => enemyPlayer.skillLevels[s] = 1); 
             } else {
                 if(!myRole) myRole = 'p1'; if(myRole === 'p1') { myPlayer = p1; enemyPlayer = p2; } else { myPlayer = p2; enemyPlayer = p1; }
                 document.getElementById('enemyNameDisplay').innerText = "상대방 (Enemy)";
@@ -933,10 +940,12 @@
                 caster.stateTimer = 0.3;
             }
 
+            let projWidth = 10 + lv*5;
+
             switch(skillId) {
-                case 'slow': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#60a5fa', level: lv }); break;
-                case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
-                case 'silence': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: '#a855f7', level: lv }); break;
+                case 'slow': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : -projWidth), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: projWidth, height: projWidth, owner: caster, type: skillId, color: '#60a5fa', level: lv }); break;
+                case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : -projWidth), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: projWidth, height: projWidth, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
+                case 'silence': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : -15), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: '#a855f7', level: lv }); break;
                 case 'teleport': caster.x += dir * (150 + lv*50); createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
                 case 'mission': 
                     let m_boost = 0.1 + lv*0.1;
@@ -1165,7 +1174,6 @@
             if(myPlayer) myPlayer.update(dt); if(enemyPlayer) enemyPlayer.update(dt);
 
             if(!isAiMode && socket && socket.connected && gameState === 'playing') {
-                // 서버로 1600x900 기준의 절대 좌표를 보냄
                 socket.emit('playerState', { x: myPlayer.x, y: myPlayer.y, state: myPlayer.state, facing: myPlayer.facing, hp: myPlayer.hp, invul: myPlayer.invul, skills: myPlayer.skills, skillLevels: myPlayer.skillLevels, lastAction: myPlayer.lastAction, gunActive: myPlayer.gunActive, awpActive: myPlayer.awpActive, reloadTimer: myPlayer.reloadTimer, reloadType: myPlayer.reloadType, meleeCooldown: myPlayer.meleeCooldown, snareTimer: myPlayer.snareTimer });
             }
 
@@ -1180,7 +1188,8 @@
                         let isGun = p.type === 'gun' || p.type === 'awp';
                         let projFacing = p.vx > 0 ? 1 : -1;
                         if (isGun && projFacing === target.facing) {
-                            target.applyDamage(target.hp * 0.5);
+                            // ★ 버그 픽스: 투사체 등 공격 시에도 최소 데미지(30)를 보장하여 확실히 죽도록 처리
+                            target.applyDamage(Math.max(30, target.hp * 0.5));
                             createParticles(target.x + target.width/2, target.y + target.height/2, '#ef4444', 30);
                             projectiles.splice(i, 1);
                             continue;
@@ -1231,12 +1240,15 @@
             document.getElementById('p1HpBar').style.width = `${(myPlayer.hp/myPlayer.maxHp)*100}%`; document.getElementById('p1HpText').innerText = `${Math.floor(myPlayer.hp)} / ${myPlayer.maxHp}`;
             document.getElementById('p1Debuffs').innerText = myPlayer.speedMult < 1.0 ? '이속감소' : '';
             
+            // ★ 버그 픽스: 스킬 쿨타임 UI 연산에서 소수점 초과(100% 이상)나 음수 방지 처리
             for(let i=0; i<3; i++) { 
                 let cdRatio = 0; let skillId = myPlayer.skills[i]; 
-                if(skillId && skillId !== 'gun') {
+                if(skillId) {
                     let lv = myPlayer.skillLevels[skillId] || 1;
                     let maxCd = SKILL_DB[skillId].cd * (1.0 - ((lv-1)*0.15));
                     cdRatio = myPlayer.cooldowns[i] / maxCd; 
+                    if (cdRatio > 1) cdRatio = 1;
+                    if (cdRatio < 0) cdRatio = 0;
                 }
                 document.getElementById(`skillCool${i+1}`).style.height = `${cdRatio * 100}%`; 
             }
