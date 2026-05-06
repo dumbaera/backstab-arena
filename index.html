@@ -243,7 +243,14 @@
 
         const RANK_COLORS = { '기본':'#9ca3af', '초급':'#ffffff', '중급':'#34d399', '고급':'#60a5fa', '관령':'#c084fc', '하만':'#f87171', '청령':'#facc15' };
 
-        let userData = {};
+        // ★ 버그 수정: 게임을 로그인 없이 바로 실행할 때 에러가 나지 않도록 기본 데이터 세팅
+        let userData = {
+            currency: 0, wins: 0, losses: 0,
+            unlockedSkills: ['slow', 'snare', 'teleport'],
+            equippedSkills: ['slow', 'snare', 'teleport'],
+            skillLevels: { 'slow': 1, 'snare': 1, 'teleport': 1 },
+            skillFragments: {}
+        };
         let isAiMode = false; 
         
         let currentId = "", currentPw = "";
@@ -352,8 +359,8 @@
                         enemyPlayer.gunActive = data.gunActive; enemyPlayer.awpActive = data.awpActive; 
                         enemyPlayer.reloadTimer = data.reloadTimer; enemyPlayer.reloadType = data.reloadType;
                         
-                        // ★ 속박 타이머 동기화 추가
                         if(data.snareTimer !== undefined) enemyPlayer.snareTimer = data.snareTimer;
+                        if(data.stateTimer !== undefined) enemyPlayer.stateTimer = data.stateTimer;
                         
                         if(data.meleeCooldown) enemyPlayer.meleeCooldown = data.meleeCooldown; 
 
@@ -398,7 +405,6 @@
                 this.silenced = false; this.distanceLock = false;
                 this.healTick = 0; this.revive = false;
                 
-                // ★ 속박 타이머 추가
                 this.snareTimer = 0;
                 
                 this.gunActive = false; this.gunClip = 0;
@@ -410,15 +416,13 @@
                 this.lastAction = { type: null, id: null, ts: 0 };
             }
 
-            // ★ 데미지 판정: 호론 능력 1.5배, 체력 제한 없음
             applyDamage(amount) {
                 if(this.invul || this.godMode) return;
                 
-                if(matchState.horonActive) amount *= 1.5; // 호론 데미지 증폭
+                if(matchState.horonActive) amount *= 1.5;
                 
                 this.hp -= amount;
                 
-                // 체력 0.1 제한 코드 완전 삭제 (즉사 가능)
                 if(this.hp <= 0 && this.revive) { 
                     this.hp = 50; this.revive = false; 
                     createParticles(this.x + this.width/2, this.y + this.height/2, '#eab308', 40); 
@@ -455,21 +459,19 @@
                     if (this.snareTimer < 0) this.snareTimer = 0;
                 }
                 
-                // ★ 평타 딜레이 (0.5초) 및 패링 로직
+                // ★ 평타 딜레이 및 패링 판정 로직
                 if (this.state === 'attack_windup') {
                     this.stateTimer -= dt;
-                    this.vx *= Math.pow(0.5, dt * 60); // 딜레이 중에는 속도가 급감함 (묵직한 액션)
+                    this.vx *= Math.pow(0.5, dt * 60);
 
                     let enemy = this === myPlayer ? enemyPlayer : myPlayer;
                     if (isAiMode && this === enemyPlayer) enemy = myPlayer;
 
-                    // 0.3초 경과 후 (남은 시간 0.2초 이하) 패링 판정 창 열림
                     if (this.stateTimer <= 0.2 && this.stateTimer > 0) {
-                        if (enemy && enemy.state === 'slide') { // 적이 대시(회피) 중이라면
+                        if (enemy && enemy.state === 'slide') { 
                             let reach = 50; 
                             let hitX = this.facing === 1 ? this.x + this.width : this.x - reach;
                             if( hitX < enemy.x + enemy.width && hitX + reach > enemy.x && this.y < enemy.y + enemy.height && this.y + this.height > enemy.y) {
-                                // ★ 패링 성공! 공격자는 스턴에 걸림
                                 this.state = 'stun';
                                 this.stateTimer = 0.5;
                                 createParticles(this.x + this.width/2, this.y + this.height/2, '#facc15', 30);
@@ -478,9 +480,8 @@
                         }
                     }
 
-                    // 0.5초 딜레이가 끝났고 패링 당하지 않았다면 실제 데미지 적용
                     if (this.stateTimer <= 0) {
-                        this.state = 'attack'; // 내려치는 짧은 모션으로 변경
+                        this.state = 'attack'; 
                         this.stateTimer = 0.2; 
                         
                         if (enemy) {
@@ -488,12 +489,10 @@
                             let hitX = this.facing === 1 ? this.x + this.width : this.x - reach;
                             if( hitX < enemy.x + enemy.width && hitX + reach > enemy.x && this.y < enemy.y + enemy.height && this.y + this.height > enemy.y) {
                                 if(!enemy.invul && !enemy.godMode) {
-                                    // 등 공격 판정: 현재 체력 50%
                                     if (this.facing === enemy.facing) {
                                         enemy.applyDamage(enemy.hp * 0.5);
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ef4444', 30);
                                     } else {
-                                        // 정면 공격 판정: 30 고정 데미지
                                         enemy.vx = this.facing * 1200;
                                         enemy.applyDamage(30); 
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#60a5fa', 15);
@@ -653,9 +652,8 @@
                 ctx.beginPath(); ctx.moveTo(0, -10);
                 
                 if (isMelee) {
-                    ctx.lineTo(this.facing * 25, 5); // 내려친 모션
+                    ctx.lineTo(this.facing * 25, 5);
                 } else if (isWindup) {
-                    // ★ 평타 준비 동작 (팔을 위로 치켜듬)
                     ctx.lineTo(this.facing * 5, -30);
                     ctx.lineTo(this.facing * 15, -40);
                 } else if (isShooting) {
@@ -676,7 +674,6 @@
 
                 if(this.state === 'stun') { ctx.fillStyle = 'yellow'; ctx.font = '20px sans-serif'; ctx.fillText("⚡", -10, -50); }
                 if(this.silenced) { ctx.fillStyle = 'gray'; ctx.font = '16px sans-serif'; ctx.fillText("...", -10, -55); }
-                // ★ 속박(Snare) 이펙트
                 if(this.snareTimer > 0) { ctx.fillStyle = 'rgba(250,204,21,0.5)'; ctx.beginPath(); ctx.ellipse(0, 35, 20, 10, 0, 0, Math.PI*2); ctx.fill(); }
                 
                 if(this.reloadTimer > 0) {
@@ -760,7 +757,7 @@
         function unequipSkill(index) { userData.equippedSkills[index] = null; renderEquipUI(); }
 
         // ==========================================
-        // 게임 코어 로직 (3판 2선승제 적용)
+        // 게임 코어 로직
         // ==========================================
         function joinGame() { isAiMode = false; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('waitingScreen').style.display = 'flex'; socket.emit('joinQueue'); }
         function startAiGame() { isAiMode = true; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('inGameUI').style.display = 'block'; document.getElementById('serverStatus').innerText = "AI 싱글플레이 모드"; document.getElementById('serverStatus').className = "pointer-events-auto text-purple-400 border border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"; initRound(); }
@@ -932,7 +929,7 @@
             }
         }
 
-        // ★ 평타 0.5초 딜레이 및 패링 적용
+        // ★ 버그 수정: 평타에 즉사/데미지 구형 코드가 중복 실행되던 부분 완전 삭제 (오직 딜레이 모션만 시작)
         function executeAttack(attacker, isRemote = false) {
             if(attacker.state === 'slide' || attacker.state === 'attack' || attacker.state === 'attack_windup' || attacker.reloadTimer > 0) return;
             
@@ -960,7 +957,7 @@
 
             if (isMelee) {
                 attacker.meleeCooldown = 1.0; 
-                // 즉시 공격하지 않고 0.5초 딜레이 모션(windup) 시작
+                // 즉시 공격하지 않고 0.5초 딜레이 모션(windup) 시작, 데미지 처리는 Player.update()에서 실행됨
                 attacker.state = 'attack_windup';
                 attacker.stateTimer = 0.5;
             }
@@ -973,7 +970,7 @@
             let isRanged = enemyPlayer.gunActive || enemyPlayer.awpActive;
             let optimalDist = isRanged ? 400 : 60; 
 
-            // ★ AI가 속박(Snare) 상태라면 이동과 방향전환 불가능
+            // AI가 속박(Snare) 상태라면 이동과 방향전환 불가능
             if (enemyPlayer.snareTimer <= 0) {
                 let moveX = 0;
                 if (dist > optimalDist + 20) moveX = dx > 0 ? 1 : -1; 
@@ -992,7 +989,6 @@
                 else if (!isRanged && dist <= 80 && Math.random() < 0.05 && enemyPlayer.meleeCooldown <= 0) executeAttack(enemyPlayer, true); 
             }
 
-            // 점프 조건
             if (enemyPlayer.snareTimer <= 0 && myPlayer.y < enemyPlayer.y - 20 && Math.random() < 0.02 && enemyPlayer.y >= groundY - enemyPlayer.height) {
                 enemyPlayer.vy = -750 * enemyPlayer.jumpMult; enemyPlayer.state = 'jump';
             }
@@ -1015,7 +1011,6 @@
             let sky = ctx.createLinearGradient(0, 0, 0, groundY); sky.addColorStop(0, '#0f172a'); sky.addColorStop(1, '#312e81'); ctx.fillStyle = sky; ctx.fillRect(0, 0, width, height);
             ctx.fillStyle = 'white'; bgStars.forEach(s => { s.opacity += (Math.random() - 0.5) * 0.1; if(s.opacity > 1) s.opacity = 1; if(s.opacity < 0.2) s.opacity = 0.2; ctx.globalAlpha = s.opacity; ctx.beginPath(); ctx.arc(s.x % width, s.y % groundY, s.size, 0, Math.PI*2); ctx.fill(); }); ctx.globalAlpha = 1.0;
             
-            // ★ 거대 보스(명신, 호론) 렌더링
             if (matchState.myungshinActive) {
                 ctx.save();
                 let pulse = Math.sin(time * 2);
@@ -1090,7 +1085,6 @@
                 let isImmobile = myPlayer.state === 'stun' || (myPlayer.reloadType === 'awp' && myPlayer.reloadTimer > 0);
                 let gunReloading = (myPlayer.reloadType === 'gun' && myPlayer.reloadTimer > 0);
 
-                // ★ 속박(Snare) 중일 때는 이동/대시/점프 차단, 방향 전환 차단 (단, 공격은 가능)
                 if (myPlayer.snareTimer > 0 && !isImmobile) {
                     if(mouse.click && myPlayer.state !== 'slide' && myPlayer.state !== 'attack_windup') { 
                         executeAttack(myPlayer); mouse.click = false; 
@@ -1141,7 +1135,6 @@
                         let isGun = p.type === 'gun' || p.type === 'awp';
                         let projFacing = p.vx > 0 ? 1 : -1;
                         if (isGun && projFacing === target.facing) {
-                            // ★ 총알 백스탭 (현재 체력 50% 데미지)
                             target.applyDamage(target.hp * 0.5);
                             createParticles(target.x + target.width/2, target.y + target.height/2, '#ef4444', 30);
                             projectiles.splice(i, 1);
@@ -1150,7 +1143,6 @@
 
                         let lv = p.level || 1;
                         if(p.type === 'slow') target.speedMult = 0.6 - (lv*0.1); 
-                        // ★ 속박 피격 로직 (스턴 대신 속박 타이머, 이동 정지)
                         else if(p.type === 'snare') { target.snareTimer = 1.0 + (lv*0.5); target.vx = 0; }
                         else if(p.type === 'silence') target.silenced = true; 
                         else if(p.type === 'bomb') target.applyDamage(10 + lv*5);
@@ -1188,7 +1180,7 @@
                 } else if(enemyPlayer && enemyPlayer.hp <= 0) { 
                     handleRoundEnd('me', "적을 제압했습니다!"); 
                 } 
-                if(matchState.myungshinActive) { myPlayer.applyDamage(3 * dt); } // 초당 3 데미지
+                if(matchState.myungshinActive) { myPlayer.applyDamage(3 * dt); } 
             }
 
             document.getElementById('p1HpBar').style.width = `${(myPlayer.hp/myPlayer.maxHp)*100}%`; document.getElementById('p1HpText').innerText = `${Math.floor(myPlayer.hp)} / ${myPlayer.maxHp}`;
