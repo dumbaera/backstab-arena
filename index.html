@@ -417,7 +417,6 @@
                 this.meleeCooldown = 0; 
                 
                 this.skills = [null, null, null]; this.cooldowns = [0, 0, 0];
-                // ★ 버그 픽스: 스킬 레벨 딕셔너리 누락 오류 완벽 복구
                 this.skillLevels = {}; 
                 this.lastAction = { type: null, id: null, ts: 0 };
             }
@@ -436,6 +435,7 @@
             updateDebuffs() {
                 let hpRatio = this.hp / this.maxHp;
                 if(hpRatio < 0.3) this.speedMult = 0.6; else if(hpRatio < 0.6) this.speedMult = 0.8; else this.speedMult = 1.0;
+                
                 if(this === myPlayer) {
                     const overlay = document.getElementById('visionOverlay');
                     if(hpRatio < 0.5) { let visionSize = hpRatio * 200; overlay.style.background = `radial-gradient(circle at center, transparent ${visionSize}%, rgba(0,0,0,0.95) ${visionSize + 20}%)`; } 
@@ -452,6 +452,9 @@
                 if (this.y + this.height >= groundY) { this.y = groundY - this.height; this.vy = 0; if(this.state === 'jump') this.state = 'idle'; }
                 if(this.x < 0) this.x = 0; if(this.x + this.width > width) this.x = width - this.width;
                 
+                // ★ AI 점프력 무한 중첩 방지를 위한 최소/최대치 교정 (버그 픽스)
+                if (this.jumpMult < 1.0) this.jumpMult = 1.0;
+                
                 if (this.snareTimer > 0) {
                     this.snareTimer -= dt;
                     if (this.snareTimer < 0) this.snareTimer = 0;
@@ -459,7 +462,6 @@
                 
                 if (this.state === 'attack_windup') {
                     this.stateTimer -= dt;
-                    // 공격 기 모으는 중에도 정상적으로 이동 마찰력이 필요함 (아래에서 공통 처리)
 
                     let enemy = this === myPlayer ? enemyPlayer : myPlayer;
                     if (isAiMode && this === enemyPlayer) enemy = myPlayer;
@@ -521,7 +523,6 @@
                 let cdMult = matchState.myungshinActive ? 2.0 : 1.0; 
                 for(let i=0; i<3; i++) { if(this.cooldowns[i] > 0) this.cooldowns[i] -= dt * cdMult; else this.cooldowns[i] = 0; }
                 
-                // ★ 버그 픽스: 기 모으는 중(attack_windup)일 때도 미끄러지지 않게 정상 마찰력을 적용합니다!
                 if (this.state === 'slide') {
                     trails.push({ x: this.x, y: this.y, facing: this.facing, life: 1.0, isP1: this.isP1 });
                     this.vx *= Math.pow(0.8, dt * 60); 
@@ -552,7 +553,6 @@
                 let breath = (this.state === 'idle') ? Math.sin(t) * 2 : 0; 
                 ctx.translate(0, breath);
 
-                // 평타 기 모으는 중일 때도 다리(걷기) 애니메이션 실행
                 let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && Math.abs(this.vx) > 10);
                 
                 let cycle = isRunning ? this.x * 0.08 : 0;
@@ -796,7 +796,7 @@
                 document.getElementById('enemyNameDisplay').innerText = "상대방 (AI Bot)";
                 
                 let keysArr = Object.keys(SKILL_DB);
-                enemyPlayer.skillLevels = {}; // AI 스킬 초기화 보강
+                enemyPlayer.skillLevels = {}; 
                 enemyPlayer.skills = [keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)]];
                 enemyPlayer.skills.forEach(s => enemyPlayer.skillLevels[s] = Math.floor(Math.random()*3)+1); 
             } else {
@@ -819,7 +819,6 @@
             gameState = 'playing'; 
             document.getElementById('messageOverlay').style.display = 'none'; 
 
-            // ★ 버그 픽스: 루프가 확실하게 시작되도록 보장
             if (gameLoopId) cancelAnimationFrame(gameLoopId); 
             lastTime = performance.now();
             gameLoopId = requestAnimationFrame(gameLoop);
@@ -865,14 +864,17 @@
             }
         }
 
+        // ★ 매치 종료 시 보상 업데이트 (승리 시 2개, 패배 시 1개 획득)
         function handleMatchEnd(winner, msg) {
             gameState = 'result';
             if (winner === 'me') {
-                userData.wins++; userData.currency++; 
-                showMessage("MATCH WIN!", msg + "<br>(재화 1 획득)", true);
+                userData.wins++; 
+                userData.currency += 2; 
+                showMessage("MATCH WIN!", msg + "<br>(재화 2 획득)", true);
             } else {
                 userData.losses++; 
-                showMessage("MATCH LOSE", msg, true);
+                userData.currency += 1; 
+                showMessage("MATCH LOSE", msg + "<br>(재화 1 획득)", true);
             }
             saveData();
         }
@@ -915,7 +917,14 @@
                 case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
                 case 'silence': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: '#a855f7', level: lv }); break;
                 case 'teleport': caster.x += dir * (150 + lv*50); createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
-                case 'mission': caster.speedMult += 0.1 + lv*0.1; caster.jumpMult += 0.1 + lv*0.1; createParticles(caster.x, caster.y, '#34d399', 30); break;
+                // ★ AI 무한 점프 버그 수정을 위한 버프 초기화(타이머) 추가
+                case 'mission': 
+                    let m_boost = 0.1 + lv*0.1;
+                    caster.speedMult += m_boost; 
+                    caster.jumpMult += m_boost; 
+                    setTimeout(() => { caster.jumpMult -= m_boost; }, 6000); // 6초 뒤 점프 버프만 해제
+                    createParticles(caster.x, caster.y, '#34d399', 30); 
+                    break;
                 case 'front_tp': caster.x = target.x - (target.facing * 60); caster.facing = target.facing; createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
                 case 'distance': caster.distanceLock = true; target.distanceLock = true; setTimeout(() => { caster.distanceLock = false; target.distanceLock = false; }, 2000 + lv*1000); break;
                 case 'purify': caster.silenced = false; caster.speedMult = Math.max(1.0, caster.speedMult); createParticles(caster.x, caster.y, '#ffffff', 30); break;
@@ -927,7 +936,20 @@
                 case 'bombard': let bombCount = 2 + lv; for(let i=0; i<bombCount; i++) { setTimeout(() => { projectiles.push({ x: target.x + (Math.random()*150 - 75), y: -50, vx: 0, vy: 1600, width: 20+lv*5, height: 40, owner: caster, type: 'bomb', color: '#f87171', level: lv }); }, i * 250); } break;
                 case 'mine': entities.push({ x: caster.x + caster.width/2 - 15, y: groundY - 10, width: 30 + (lv-1)*10, height: 10, owner: caster, type: 'mine', level: lv }); break;
                 case 'deathnote': if(target === myPlayer || isAiMode) target.applyDamage(40 + lv*20); createParticles(target.x, target.y, '#000000', 40); break;
-                case 'roar': caster.silenced = false; caster.speedMult += 0.3; caster.jumpMult += 0.3; if(Math.abs(caster.x - target.x) < 200 + lv*50) { if(target === myPlayer || isAiMode) { target.speedMult -= 0.3; target.applyDamage(15 + lv*5); } createParticles(target.x, target.y, '#f59e0b', 40); } break;
+                // ★ 호령 스킬 무한 점프 버그 수정
+                case 'roar': 
+                    caster.silenced = false; 
+                    caster.speedMult += 0.3; 
+                    caster.jumpMult += 0.3; 
+                    setTimeout(() => { caster.jumpMult -= 0.3; }, 6000);
+                    if(Math.abs(caster.x - target.x) < 200 + lv*50) { 
+                        if(target === myPlayer || isAiMode) { 
+                            target.speedMult -= 0.3; 
+                            target.applyDamage(15 + lv*5); 
+                        } 
+                        createParticles(target.x, target.y, '#f59e0b', 40); 
+                    } 
+                    break;
                 case 'tiger': caster.state = 'stun'; caster.stateTimer = 2.0; setTimeout(() => { if(caster.hp > 0) { caster.x = target.x; if(target === myPlayer || isAiMode) { let dmg = target.invul || target.godMode ? 15 : (25 + lv*15); target.invul = false; target.godMode = false; target.applyDamage(dmg); } createParticles(target.x, target.y, '#f59e0b', 50); } }, 2000); break;
                 case 'bankai': if(isAiMode || !isRemote) { let highSkills = ['deathnote', 'heal', 'gun', 'shorten', 'roar', 'tiger', 'awp', 'god']; let randSkill = highSkills[Math.floor(Math.random() * highSkills.length)]; useSkill(caster, randSkill, isRemote); if(caster === myPlayer) myPlayer.lastAction = { type: 'skill', id: randSkill, ts: Date.now() }; } break;
                 case 'copy': if(isAiMode || !isRemote) { caster.skills = [...target.skills]; caster.skillLevels = {...target.skillLevels}; } break;
@@ -991,8 +1013,10 @@
                 else if (!isRanged && dist <= 80 && Math.random() < 0.05 && enemyPlayer.meleeCooldown <= 0) executeAttack(enemyPlayer, true); 
             }
 
+            // ★ AI 점프 로직 변경 (-750에서 플레이어와 동일하게 -700으로 고정)
             if (enemyPlayer.snareTimer <= 0 && myPlayer.y < enemyPlayer.y - 20 && Math.random() < 0.02 && enemyPlayer.y >= groundY - enemyPlayer.height) {
-                enemyPlayer.vy = -750 * enemyPlayer.jumpMult; enemyPlayer.state = 'jump';
+                enemyPlayer.vy = -700 * enemyPlayer.jumpMult; 
+                enemyPlayer.state = 'jump';
             }
 
             if (Math.random() < 0.005 && enemyPlayer.state !== 'attack_windup') { 
