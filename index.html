@@ -13,7 +13,8 @@
         #gameCanvas { display: block; width: 100%; height: 100vh; }
         .pointer-events-auto { pointer-events: auto; }
         
-        #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: background 0.3s; }
+        /* ★ 시야 오버레이에 블러 트랜지션 추가 */
+        #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: backdrop-filter 0.3s, -webkit-backdrop-filter 0.3s, background 0.3s; }
         #serverStatus { position: absolute; top: 10px; left: 10px; padding: 5px 10px; background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 12px; z-index: 100; border: 1px solid rgba(255,255,255,0.2); }
         
         .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
@@ -434,12 +435,24 @@
 
             updateDebuffs() {
                 let hpRatio = this.hp / this.maxHp;
-                if(hpRatio < 0.3) this.speedMult = 0.6; else if(hpRatio < 0.6) this.speedMult = 0.8; else this.speedMult = 1.0;
+                // ★ 감속 디버프 수치 완화: 0.3 미만 0.8배, 0.6 미만 0.9배로 상향
+                if(hpRatio < 0.3) this.speedMult = 0.8; 
+                else if(hpRatio < 0.6) this.speedMult = 0.9; 
+                else this.speedMult = 1.0;
                 
                 if(this === myPlayer) {
                     const overlay = document.getElementById('visionOverlay');
-                    if(hpRatio < 0.5) { let visionSize = hpRatio * 200; overlay.style.background = `radial-gradient(circle at center, transparent ${visionSize}%, rgba(0,0,0,0.95) ${visionSize + 20}%)`; } 
-                    else overlay.style.background = 'none';
+                    if(hpRatio < 0.5) { 
+                        // ★ 시야 감소(터널 비전) 대신 흐려지는(Blur) 효과와 옅은 붉은빛 적용
+                        let blurPx = (0.5 - hpRatio) * 12; // 체력이 낮을수록 블러가 최대 약 5~6px까지 강해짐
+                        overlay.style.backdropFilter = `blur(${blurPx}px)`;
+                        overlay.style.webkitBackdropFilter = `blur(${blurPx}px)`;
+                        overlay.style.background = `rgba(220, 38, 38, ${(0.5 - hpRatio) * 0.3})`;
+                    } else {
+                        overlay.style.backdropFilter = 'none';
+                        overlay.style.webkitBackdropFilter = 'none';
+                        overlay.style.background = 'none';
+                    }
                 }
             }
 
@@ -452,7 +465,6 @@
                 if (this.y + this.height >= groundY) { this.y = groundY - this.height; this.vy = 0; if(this.state === 'jump') this.state = 'idle'; }
                 if(this.x < 0) this.x = 0; if(this.x + this.width > width) this.x = width - this.width;
                 
-                // ★ AI 점프력 무한 중첩 방지를 위한 최소/최대치 교정 (버그 픽스)
                 if (this.jumpMult < 1.0) this.jumpMult = 1.0;
                 
                 if (this.snareTimer > 0) {
@@ -864,7 +876,6 @@
             }
         }
 
-        // ★ 매치 종료 시 보상 업데이트 (승리 시 2개, 패배 시 1개 획득)
         function handleMatchEnd(winner, msg) {
             gameState = 'result';
             if (winner === 'me') {
@@ -917,12 +928,11 @@
                 case 'snare': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 10 + lv*5, height: 10 + lv*5, owner: caster, type: skillId, color: '#facc15', level: lv }); break;
                 case 'silence': projectiles.push({ x: caster.x + (dir === 1 ? caster.width : 0), y: caster.y + caster.height/2, vx: dir * 1200, vy: 0, width: 15, height: 15, owner: caster, type: skillId, color: '#a855f7', level: lv }); break;
                 case 'teleport': caster.x += dir * (150 + lv*50); createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
-                // ★ AI 무한 점프 버그 수정을 위한 버프 초기화(타이머) 추가
                 case 'mission': 
                     let m_boost = 0.1 + lv*0.1;
                     caster.speedMult += m_boost; 
                     caster.jumpMult += m_boost; 
-                    setTimeout(() => { caster.jumpMult -= m_boost; }, 6000); // 6초 뒤 점프 버프만 해제
+                    setTimeout(() => { caster.jumpMult -= m_boost; }, 6000); 
                     createParticles(caster.x, caster.y, '#34d399', 30); 
                     break;
                 case 'front_tp': caster.x = target.x - (target.facing * 60); caster.facing = target.facing; createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
@@ -936,7 +946,6 @@
                 case 'bombard': let bombCount = 2 + lv; for(let i=0; i<bombCount; i++) { setTimeout(() => { projectiles.push({ x: target.x + (Math.random()*150 - 75), y: -50, vx: 0, vy: 1600, width: 20+lv*5, height: 40, owner: caster, type: 'bomb', color: '#f87171', level: lv }); }, i * 250); } break;
                 case 'mine': entities.push({ x: caster.x + caster.width/2 - 15, y: groundY - 10, width: 30 + (lv-1)*10, height: 10, owner: caster, type: 'mine', level: lv }); break;
                 case 'deathnote': if(target === myPlayer || isAiMode) target.applyDamage(40 + lv*20); createParticles(target.x, target.y, '#000000', 40); break;
-                // ★ 호령 스킬 무한 점프 버그 수정
                 case 'roar': 
                     caster.silenced = false; 
                     caster.speedMult += 0.3; 
@@ -1013,7 +1022,6 @@
                 else if (!isRanged && dist <= 80 && Math.random() < 0.05 && enemyPlayer.meleeCooldown <= 0) executeAttack(enemyPlayer, true); 
             }
 
-            // ★ AI 점프 로직 변경 (-750에서 플레이어와 동일하게 -700으로 고정)
             if (enemyPlayer.snareTimer <= 0 && myPlayer.y < enemyPlayer.y - 20 && Math.random() < 0.02 && enemyPlayer.y >= groundY - enemyPlayer.height) {
                 enemyPlayer.vy = -700 * enemyPlayer.jumpMult; 
                 enemyPlayer.state = 'jump';
