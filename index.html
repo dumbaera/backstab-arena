@@ -319,9 +319,15 @@
 
                 socket.on("loginResult", (res) => {
                     if(res.success) {
-                        let defData = { currency: 0, wins: 0, losses: 0, unlockedSkills: ['slow', 'snare', 'teleport'], equippedSkills: ['slow', 'snare', 'teleport'], skillLevels: {}, skillFragments: {} };
+                        // ★ 버그 픽스: 기존 유저의 데이터에 배열 객체가 없을 때 터지는 것을 방지하는 안전망
+                        let defData = { currency: 0, wins: 0, losses: 0, unlockedSkills: ['slow', 'snare', 'teleport'], equippedSkills: ['slow', 'snare', 'teleport'], skillLevels: { 'slow': 1, 'snare': 1, 'teleport': 1 }, skillFragments: {} };
                         userData = res.data ? { ...defData, ...res.data } : defData; 
                         
+                        if (!Array.isArray(userData.unlockedSkills)) userData.unlockedSkills = ['slow', 'snare', 'teleport'];
+                        if (!Array.isArray(userData.equippedSkills)) userData.equippedSkills = ['slow', 'snare', 'teleport'];
+                        if (!userData.skillLevels) userData.skillLevels = { 'slow': 1, 'snare': 1, 'teleport': 1 };
+                        if (!userData.skillFragments) userData.skillFragments = {};
+
                         userData.unlockedSkills.forEach(s => {
                             if(!userData.skillLevels[s]) userData.skillLevels[s] = 1;
                             if(userData.skillFragments[s] === undefined) userData.skillFragments[s] = 0;
@@ -452,7 +458,7 @@
                 
                 if (this.state === 'attack_windup') {
                     this.stateTimer -= dt;
-                    this.vx *= Math.pow(0.5, dt * 60);
+                    // ★ 버그 픽스: 속도를 줄이는 코드를 삭제하여 평타(기 모으기) 중에도 기존 속도 그대로 유지하게 함
 
                     let enemy = this === myPlayer ? enemyPlayer : myPlayer;
                     if (isAiMode && this === enemyPlayer) enemy = myPlayer;
@@ -517,7 +523,7 @@
                 if (this.state === 'slide') {
                     trails.push({ x: this.x, y: this.y, facing: this.facing, life: 1.0, isP1: this.isP1 });
                     this.vx *= Math.pow(0.8, dt * 60); 
-                } else if(this.state !== 'stun' && this.state !== 'attack_windup') {
+                } else if(this.state !== 'stun') {
                     let friction = (this.y + this.height >= groundY) ? Math.pow(0.75, dt * 60) : Math.pow(0.97, dt * 60);
                     this.vx *= friction;
                 }
@@ -544,7 +550,8 @@
                 let breath = (this.state === 'idle') ? Math.sin(t) * 2 : 0; 
                 ctx.translate(0, breath);
 
-                let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && this.state !== 'attack_windup' && Math.abs(this.vx) > 10);
+                // ★ 버그 픽스: 다리가 안 움직이는 버그를 막기 위해 조건문에서 'attack_windup' 제외 -> 달리면서도 기모으기 가능!
+                let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && Math.abs(this.vx) > 10);
                 
                 let cycle = isRunning ? this.x * 0.08 : 0;
                 let armSwing = isRunning ? Math.sin(cycle) * 25 : 0;
@@ -638,10 +645,9 @@
                     ctx.restore();
                 }
 
-                // ★ 이펙트 추가: 딜레이 모션 중 무기 빛남 효과
                 ctx.lineWidth = 6; ctx.strokeStyle = primaryColor;
                 if (isWindup) {
-                    ctx.shadowColor = '#facc15'; // 노란색 빛
+                    ctx.shadowColor = '#facc15'; 
                     ctx.shadowBlur = 15;
                 }
 
@@ -661,7 +667,7 @@
                     ctx.lineTo(-armSwing * this.facing, 10); 
                 }
                 ctx.stroke();
-                ctx.shadowBlur = 0; // 그림자 효과 초기화
+                ctx.shadowBlur = 0; 
 
                 if (isCasting) {
                     ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 15; ctx.fillStyle = 'rgba(168, 85, 247, 0.8)';
@@ -801,7 +807,9 @@
                 document.getElementById('enemyNameDisplay').innerText = "상대방 (Enemy)";
             }
 
-            myPlayer.skills = [...userData.equippedSkills]; myPlayer.skillLevels = {...userData.skillLevels}; 
+            // ★ 버그 픽스: 만약 유저 데이터 배열이 제대로 안 넘어왔을 경우 충돌을 막기 위해 안전하게 복사
+            myPlayer.skills = (userData && Array.isArray(userData.equippedSkills)) ? [...userData.equippedSkills] : [null, null, null]; 
+            myPlayer.skillLevels = (userData && userData.skillLevels) ? {...userData.skillLevels} : {}; 
 
             for(let i=0; i<3; i++) { 
                 let skillId = myPlayer.skills[i]; 
@@ -815,12 +823,13 @@
             gameState = 'playing'; 
             document.getElementById('messageOverlay').style.display = 'none'; 
 
-            if (gameLoopId) cancelAnimationFrame(gameLoopId); 
-            lastTime = performance.now();
-            gameLoopId = requestAnimationFrame(gameLoop);
+            // ★ 버그 픽스: 중복 루프가 겹쳐서 진행이 멈추는 것을 방지
+            if (!gameLoopId) { 
+                lastTime = performance.now();
+                gameLoopId = requestAnimationFrame(gameLoop);
+            }
         }
 
-        // ★ 수정: 라운드 종료 중임을 확실히 알 수 있도록 서브 문구 추가
         function showMessage(title, sub, showButton = true) { 
             let subMsg = sub;
             if (!showButton) subMsg += "<br><span class='text-sm text-gray-400 mt-4 block'>잠시 후 다음 라운드가 시작됩니다...</span>";
@@ -931,7 +940,6 @@
         }
 
         function executeAttack(attacker, isRemote = false) {
-            // 공격 중이거나 장전 중일 땐 공격 불가
             if(attacker.state === 'slide' || attacker.state === 'attack' || attacker.state === 'attack_windup' || attacker.reloadTimer > 0) return;
             
             let isMelee = !attacker.awpActive && !attacker.gunActive;
@@ -956,7 +964,6 @@
                 return; 
             }
 
-            // ★ 즉시 공격 코드를 모두 없애고, 0.5초 선딜레이만 발동시킴 (충돌 원인 제거)
             if (isMelee) {
                 attacker.meleeCooldown = 1.0; 
                 attacker.state = 'attack_windup';
@@ -971,7 +978,6 @@
             let isRanged = enemyPlayer.gunActive || enemyPlayer.awpActive;
             let optimalDist = isRanged ? 400 : 60; 
 
-            // AI가 속박 상태일 때는 제자리 고정
             if (enemyPlayer.snareTimer <= 0) {
                 let moveX = 0;
                 if (dist > optimalDist + 20) moveX = dx > 0 ? 1 : -1; 
@@ -979,7 +985,8 @@
 
                 enemyPlayer.facing = dx > 0 ? 1 : -1;
                 
-                if(moveX !== 0 && enemyPlayer.state !== 'slide' && enemyPlayer.state !== 'attack_windup') {
+                // ★ 버그 픽스: AI도 기 모으기 중 이동이 가능하도록 조건 완화
+                if(moveX !== 0 && enemyPlayer.state !== 'slide') {
                     let targetVx = moveX * 560 * enemyPlayer.speedMult;
                     enemyPlayer.vx += (targetVx - enemyPlayer.vx) * 12 * dt;
                 }
@@ -994,7 +1001,7 @@
                 enemyPlayer.vy = -750 * enemyPlayer.jumpMult; enemyPlayer.state = 'jump';
             }
 
-            if (Math.random() < 0.005 && enemyPlayer.state !== 'attack_windup') { 
+            if (Math.random() < 0.005) { 
                 let randomSkillIdx = Math.floor(Math.random() * 3);
                 let skillId = enemyPlayer.skills[randomSkillIdx];
                 if(skillId && enemyPlayer.cooldowns[randomSkillIdx] <= 0) {
@@ -1012,7 +1019,6 @@
             let sky = ctx.createLinearGradient(0, 0, 0, groundY); sky.addColorStop(0, '#0f172a'); sky.addColorStop(1, '#312e81'); ctx.fillStyle = sky; ctx.fillRect(0, 0, width, height);
             ctx.fillStyle = 'white'; bgStars.forEach(s => { s.opacity += (Math.random() - 0.5) * 0.1; if(s.opacity > 1) s.opacity = 1; if(s.opacity < 0.2) s.opacity = 0.2; ctx.globalAlpha = s.opacity; ctx.beginPath(); ctx.arc(s.x % width, s.y % groundY, s.size, 0, Math.PI*2); ctx.fill(); }); ctx.globalAlpha = 1.0;
             
-            // ★ 수정: 브라우저 튕김 방지를 위해 호론 배경 반원 그리기 각도를 0, Math.PI*2 로 통일하여 완벽 호환되게 변경
             if (matchState.myungshinActive) {
                 ctx.save();
                 let pulse = Math.sin(time * 2);
@@ -1088,7 +1094,7 @@
                 let gunReloading = (myPlayer.reloadType === 'gun' && myPlayer.reloadTimer > 0);
 
                 if (myPlayer.snareTimer > 0 && !isImmobile) {
-                    if(mouse.click && myPlayer.state !== 'slide' && myPlayer.state !== 'attack_windup') { 
+                    if(mouse.click && myPlayer.state !== 'slide') { 
                         executeAttack(myPlayer); mouse.click = false; 
                     }
                 } 
@@ -1098,25 +1104,28 @@
                     if((myPlayer.distanceLock || enemyPlayer.distanceLock) && Math.abs(myPlayer.x - enemyPlayer.x) < 100) { if((myPlayer.x < enemyPlayer.x && moveX > 0) || (myPlayer.x > enemyPlayer.x && moveX < 0)) moveX = 0; }
                     let currentSpeedMult = gunReloading ? myPlayer.speedMult * 0.5 : myPlayer.speedMult; 
                     
-                    if(moveX !== 0 && myPlayer.state !== 'slide' && myPlayer.state !== 'attack_windup') { 
+                    // ★ 버그 픽스: 플레이어가 공격 기 모으는 중일 때도 움직임 가능
+                    if(moveX !== 0 && myPlayer.state !== 'slide') { 
                         let targetVx = moveX * 700 * currentSpeedMult;
                         myPlayer.vx += (targetVx - myPlayer.vx) * 12 * dt; 
                         myPlayer.facing = moveX; 
                     }
                     
-                    if((keys.w || keys.space) && myPlayer.y >= groundY - myPlayer.height && myPlayer.state !== 'attack_windup') { 
+                    // ★ 점프도 기 모으는 중 가능
+                    if((keys.w || keys.space) && myPlayer.y >= groundY - myPlayer.height) { 
                         myPlayer.vy = -700 * myPlayer.jumpMult; 
                         myPlayer.state = 'jump'; 
                     }
                     
-                    if((keys.s || mouse.rightClick) && myPlayer.state !== 'slide' && myPlayer.state !== 'attack_windup') { 
+                    // ★ 대쉬 및 기타 모션도 가능
+                    if((keys.s || mouse.rightClick) && myPlayer.state !== 'slide') { 
                         if(!gunReloading) { 
                             myPlayer.state = 'slide'; myPlayer.stateTimer = 0.2; myPlayer.invul = true; myPlayer.vy = 0; 
                             myPlayer.vx = myPlayer.facing * 1200; mouse.rightClick = false; 
                         }
                     }
                     
-                    if(mouse.click && myPlayer.state !== 'slide' && myPlayer.state !== 'attack_windup') { executeAttack(myPlayer); mouse.click = false; }
+                    if(mouse.click && myPlayer.state !== 'slide') { executeAttack(myPlayer); mouse.click = false; }
                 }
             }
 
