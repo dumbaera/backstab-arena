@@ -10,18 +10,18 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #0f172a; color: white; touch-action: none; font-family: 'Segoe UI', sans-serif; }
-        #gameCanvas { display: block; width: 100%; height: 100vh; }
+        #gameCanvas { display: block; }
         .pointer-events-auto { pointer-events: auto; }
         
         /* ★ 시야 오버레이에 블러 트랜지션 추가 */
-        #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: backdrop-filter 0.3s, -webkit-backdrop-filter 0.3s, background 0.3s; }
+        #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: backdrop-filter 0.3s, -webkit-backdrop-filter 0.3s, background 0.3s; z-index: 5; }
         #serverStatus { position: absolute; top: 10px; left: 10px; padding: 5px 10px; background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 12px; z-index: 100; border: 1px solid rgba(255,255,255,0.2); }
         
-        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 40; }
         #waitingScreen { background:rgba(0,0,0,0.8); display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 50; }
         #lobbyScreen { display:none; background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%); flex-direction:column; justify-content:center; align-items:center; z-index: 40; }
         
-        #inGameUI { pointer-events:none; display:none; z-index: 30; width: 100%; height: 100%; }
+        #inGameUI { pointer-events:none; display:none; z-index: 30; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
         
         #messageOverlay { background:rgba(0,0,0,0.8); display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 90; }
         #gachaScreen, #equipScreen, #upgradeScreen { display:none; background:rgba(15, 23, 42, 0.95); flex-direction:column; align-items:center; justify-content:center; z-index: 60; }
@@ -39,6 +39,7 @@
 
     <div id="serverStatus" class="pointer-events-auto text-yellow-400 border border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]">서버 접속 시도 중...</div>
 
+    <!-- 캔버스 (게임 화면) -->
     <canvas id="gameCanvas"></canvas>
     <div id="visionOverlay"></div>
 
@@ -143,23 +144,24 @@
     <!-- 인게임 UI -->
     <div id="inGameUI" class="ui-layer">
         
-        <div class="absolute top-4 left-1/2 transform -translate-x-1/2 flex justify-between items-start w-full max-w-4xl px-4 pointer-events-auto">
-            <div class="w-1/3">
-                <p class="font-bold mb-1 drop-shadow-md"><span id="myHpName" class="text-blue-300">나 (Player)</span> <span id="p1HpText" class="text-sm font-normal text-gray-300">500 / 500</span></p>
+        <!-- ★ UI 레이아웃 개선: 창이 좁아져도 겹치지 않게 w-1/4, w-2/4 비율로 분할 -->
+        <div class="absolute top-4 left-0 w-full px-4 md:px-10 flex justify-between items-start pointer-events-auto">
+            <div class="w-1/4">
+                <p class="font-bold mb-1 drop-shadow-md truncate"><span id="myHpName" class="text-blue-300">나 (Player)</span> <span id="p1HpText" class="text-sm font-normal text-gray-300">500 / 500</span></p>
                 <div class="w-full bg-gray-900 h-5 rounded border border-gray-600 overflow-hidden shadow-[0_0_10px_rgba(0,0,0,0.5)]">
                     <div id="p1HpBar" class="bg-gradient-to-r from-blue-600 to-blue-400 h-full w-full transition-all duration-200"></div>
                 </div>
                 <div id="p1Debuffs" class="flex gap-1 mt-1 text-xs text-yellow-400 font-bold drop-shadow-md"></div>
             </div>
             
-            <div class="flex flex-col items-center">
-                <div id="roundScore" class="text-xl font-bold text-yellow-400 drop-shadow-[0_0_5px_rgba(234,179,8,0.8)] mb-1">★ 0 : 0 ★</div>
-                <div id="timeDisplay" class="text-4xl font-mono font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">00:00</div>
-                <div id="bossAnnouncement" class="text-red-500 font-bold text-lg mt-2 animate-pulse h-6 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]"></div>
+            <div class="flex flex-col items-center w-2/4">
+                <div id="roundScore" class="text-xl md:text-2xl font-bold text-yellow-400 drop-shadow-[0_0_5px_rgba(234,179,8,0.8)] mb-1">★ 0 : 0 ★</div>
+                <div id="timeDisplay" class="text-3xl md:text-4xl font-mono font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">00:00</div>
+                <div id="bossAnnouncement" class="text-red-500 font-bold text-sm md:text-lg mt-1 animate-pulse h-6 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]"></div>
             </div>
             
-            <div class="w-1/3 text-right">
-                <p class="font-bold mb-1 drop-shadow-md"><span id="p2HpText" class="text-sm font-normal text-gray-300">500 / 500</span> <span id="enemyNameDisplay" class="text-red-400">상대방 (Enemy)</span></p>
+            <div class="w-1/4 text-right">
+                <p class="font-bold mb-1 drop-shadow-md truncate"><span id="p2HpText" class="text-sm font-normal text-gray-300">500 / 500</span> <span id="enemyNameDisplay" class="text-red-400">상대방 (Enemy)</span></p>
                 <div class="w-full bg-gray-900 h-5 rounded border border-gray-600 overflow-hidden flex justify-end shadow-[0_0_10px_rgba(0,0,0,0.5)]">
                     <div id="p2HpBar" class="bg-gradient-to-l from-red-600 to-red-400 h-full w-full transition-all duration-200"></div>
                 </div>
@@ -263,9 +265,15 @@
             updateLobbyUI(); 
         }
 
+        // ★ 멀티플레이 오류 해결: 논리적 해상도 고정 (모든 유저가 동일한 1600x900 좌표계를 사용)
         let socket, myRole = null, myPlayer = null, enemyPlayer = null, gameLoopId = null;
-        const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let width, height, groundY;
+        let width = 1600, height = 900, groundY = 900 - 120;
+        
+        const canvas = document.getElementById('gameCanvas'); 
+        const ctx = canvas.getContext('2d');
+        canvas.width = width;
+        canvas.height = height;
+        
         let gameState = 'lobby'; let matchState = { timeElapsed: 0, horonActive: false, myungshinActive: false };
         let keys = { a: false, d: false, w: false, s: false, space: false }; let mouse = { click: false, rightClick: false };
         let projectiles = [], particles = [], entities = [], bgStars = [], trails = []; 
@@ -357,6 +365,7 @@
                 
                 socket.on("enemyState", (data) => {
                     if(enemyPlayer && gameState === 'playing' && !isAiMode) {
+                        // 서버에서 넘어온 상대방의 절대 좌표를 화면에 그대로 그림
                         if (!isNaN(data.x) && !isNaN(data.y)) { enemyPlayer.x = data.x; enemyPlayer.y = data.y; }
                         enemyPlayer.state = data.state; enemyPlayer.facing = data.facing; enemyPlayer.hp = data.hp; enemyPlayer.invul = data.invul; 
                         enemyPlayer.skills = data.skills || []; 
@@ -435,7 +444,6 @@
 
             updateDebuffs() {
                 let hpRatio = this.hp / this.maxHp;
-                // ★ 감속 디버프 수치 완화: 0.3 미만 0.8배, 0.6 미만 0.9배로 상향
                 if(hpRatio < 0.3) this.speedMult = 0.8; 
                 else if(hpRatio < 0.6) this.speedMult = 0.9; 
                 else this.speedMult = 1.0;
@@ -443,8 +451,7 @@
                 if(this === myPlayer) {
                     const overlay = document.getElementById('visionOverlay');
                     if(hpRatio < 0.5) { 
-                        // ★ 시야 감소(터널 비전) 대신 흐려지는(Blur) 효과와 옅은 붉은빛 적용
-                        let blurPx = (0.5 - hpRatio) * 12; // 체력이 낮을수록 블러가 최대 약 5~6px까지 강해짐
+                        let blurPx = (0.5 - hpRatio) * 12;
                         overlay.style.backdropFilter = `blur(${blurPx}px)`;
                         overlay.style.webkitBackdropFilter = `blur(${blurPx}px)`;
                         overlay.style.background = `rgba(220, 38, 38, ${(0.5 - hpRatio) * 0.3})`;
@@ -773,12 +780,15 @@
         function joinGame() { isAiMode = false; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('waitingScreen').style.display = 'flex'; socket.emit('joinQueue'); }
         function startAiGame() { isAiMode = true; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('inGameUI').style.display = 'block'; document.getElementById('serverStatus').innerText = "AI 싱글플레이 모드"; document.getElementById('serverStatus').className = "pointer-events-auto text-purple-400 border border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"; initRound(); }
 
+        // ★ 버그 수정: 논리 해상도를 고정하여 브라우저 크기 차이로 인한 공중부양 싱크 오류 완벽 해결
         function resize() { 
-            width = window.innerWidth || 800; 
-            height = window.innerHeight || 600; 
-            canvas.width = width; 
-            canvas.height = height; 
-            groundY = height - 120; 
+            let scale = Math.min(window.innerWidth / width, window.innerHeight / height);
+            canvas.style.width = (width * scale) + 'px';
+            canvas.style.height = (height * scale) + 'px';
+            canvas.style.position = 'absolute';
+            canvas.style.left = '50%';
+            canvas.style.top = '50%';
+            canvas.style.transform = 'translate(-50%, -50%)';
             
             if (myPlayer) myPlayer.y = Math.min(myPlayer.y, groundY - myPlayer.height);
             if (enemyPlayer) enemyPlayer.y = Math.min(enemyPlayer.y, groundY - enemyPlayer.height);
@@ -1155,6 +1165,7 @@
             if(myPlayer) myPlayer.update(dt); if(enemyPlayer) enemyPlayer.update(dt);
 
             if(!isAiMode && socket && socket.connected && gameState === 'playing') {
+                // 서버로 1600x900 기준의 절대 좌표를 보냄
                 socket.emit('playerState', { x: myPlayer.x, y: myPlayer.y, state: myPlayer.state, facing: myPlayer.facing, hp: myPlayer.hp, invul: myPlayer.invul, skills: myPlayer.skills, skillLevels: myPlayer.skillLevels, lastAction: myPlayer.lastAction, gunActive: myPlayer.gunActive, awpActive: myPlayer.awpActive, reloadTimer: myPlayer.reloadTimer, reloadType: myPlayer.reloadType, meleeCooldown: myPlayer.meleeCooldown, snareTimer: myPlayer.snareTimer });
             }
 
