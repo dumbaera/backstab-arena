@@ -319,7 +319,6 @@
 
                 socket.on("loginResult", (res) => {
                     if(res.success) {
-                        // ★ 버그 픽스: 기존 유저의 데이터에 배열 객체가 없을 때 터지는 것을 방지하는 안전망
                         let defData = { currency: 0, wins: 0, losses: 0, unlockedSkills: ['slow', 'snare', 'teleport'], equippedSkills: ['slow', 'snare', 'teleport'], skillLevels: { 'slow': 1, 'snare': 1, 'teleport': 1 }, skillFragments: {} };
                         userData = res.data ? { ...defData, ...res.data } : defData; 
                         
@@ -418,6 +417,8 @@
                 this.meleeCooldown = 0; 
                 
                 this.skills = [null, null, null]; this.cooldowns = [0, 0, 0];
+                // ★ 버그 픽스: 스킬 레벨 딕셔너리 누락 오류 완벽 복구
+                this.skillLevels = {}; 
                 this.lastAction = { type: null, id: null, ts: 0 };
             }
 
@@ -458,7 +459,7 @@
                 
                 if (this.state === 'attack_windup') {
                     this.stateTimer -= dt;
-                    // ★ 버그 픽스: 속도를 줄이는 코드를 삭제하여 평타(기 모으기) 중에도 기존 속도 그대로 유지하게 함
+                    // 공격 기 모으는 중에도 정상적으로 이동 마찰력이 필요함 (아래에서 공통 처리)
 
                     let enemy = this === myPlayer ? enemyPlayer : myPlayer;
                     if (isAiMode && this === enemyPlayer) enemy = myPlayer;
@@ -520,6 +521,7 @@
                 let cdMult = matchState.myungshinActive ? 2.0 : 1.0; 
                 for(let i=0; i<3; i++) { if(this.cooldowns[i] > 0) this.cooldowns[i] -= dt * cdMult; else this.cooldowns[i] = 0; }
                 
+                // ★ 버그 픽스: 기 모으는 중(attack_windup)일 때도 미끄러지지 않게 정상 마찰력을 적용합니다!
                 if (this.state === 'slide') {
                     trails.push({ x: this.x, y: this.y, facing: this.facing, life: 1.0, isP1: this.isP1 });
                     this.vx *= Math.pow(0.8, dt * 60); 
@@ -550,7 +552,7 @@
                 let breath = (this.state === 'idle') ? Math.sin(t) * 2 : 0; 
                 ctx.translate(0, breath);
 
-                // ★ 버그 픽스: 다리가 안 움직이는 버그를 막기 위해 조건문에서 'attack_windup' 제외 -> 달리면서도 기모으기 가능!
+                // 평타 기 모으는 중일 때도 다리(걷기) 애니메이션 실행
                 let isRunning = (this.state !== 'slide' && this.state !== 'stun' && this.state !== 'jump' && Math.abs(this.vx) > 10);
                 
                 let cycle = isRunning ? this.x * 0.08 : 0;
@@ -701,9 +703,6 @@
             }
         }
 
-        // ==========================================
-        // UI & 로비 제어
-        // ==========================================
         function updateLobbyUI() { document.getElementById('currencyDisplay').innerText = userData.currency; document.getElementById('winDisplay').innerText = userData.wins; document.getElementById('lossDisplay').innerText = userData.losses; }
         
         function showGacha() { document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('gachaScreen').style.display = 'flex'; document.getElementById('gachaResultBox').innerHTML = '<p class="text-gray-400">뽑기 버튼을 눌러주세요</p>'; document.getElementById('gachaResultBox').style.borderColor = 'transparent'; }
@@ -759,9 +758,6 @@
         function equipSkill(skillId) { let emptyIdx = userData.equippedSkills.indexOf(null); if(emptyIdx === -1) emptyIdx = userData.equippedSkills.findIndex(s => s === undefined); if(emptyIdx !== -1) userData.equippedSkills[emptyIdx] = skillId; else userData.equippedSkills[0] = skillId; renderEquipUI(); }
         function unequipSkill(index) { userData.equippedSkills[index] = null; renderEquipUI(); }
 
-        // ==========================================
-        // 게임 코어 로직
-        // ==========================================
         function joinGame() { isAiMode = false; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('waitingScreen').style.display = 'flex'; socket.emit('joinQueue'); }
         function startAiGame() { isAiMode = true; document.getElementById('lobbyScreen').style.display = 'none'; document.getElementById('inGameUI').style.display = 'block'; document.getElementById('serverStatus').innerText = "AI 싱글플레이 모드"; document.getElementById('serverStatus').className = "pointer-events-auto text-purple-400 border border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"; initRound(); }
 
@@ -800,6 +796,7 @@
                 document.getElementById('enemyNameDisplay').innerText = "상대방 (AI Bot)";
                 
                 let keysArr = Object.keys(SKILL_DB);
+                enemyPlayer.skillLevels = {}; // AI 스킬 초기화 보강
                 enemyPlayer.skills = [keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)], keysArr[Math.floor(Math.random()*keysArr.length)]];
                 enemyPlayer.skills.forEach(s => enemyPlayer.skillLevels[s] = Math.floor(Math.random()*3)+1); 
             } else {
@@ -807,7 +804,6 @@
                 document.getElementById('enemyNameDisplay').innerText = "상대방 (Enemy)";
             }
 
-            // ★ 버그 픽스: 만약 유저 데이터 배열이 제대로 안 넘어왔을 경우 충돌을 막기 위해 안전하게 복사
             myPlayer.skills = (userData && Array.isArray(userData.equippedSkills)) ? [...userData.equippedSkills] : [null, null, null]; 
             myPlayer.skillLevels = (userData && userData.skillLevels) ? {...userData.skillLevels} : {}; 
 
@@ -823,11 +819,10 @@
             gameState = 'playing'; 
             document.getElementById('messageOverlay').style.display = 'none'; 
 
-            // ★ 버그 픽스: 중복 루프가 겹쳐서 진행이 멈추는 것을 방지
-            if (!gameLoopId) { 
-                lastTime = performance.now();
-                gameLoopId = requestAnimationFrame(gameLoop);
-            }
+            // ★ 버그 픽스: 루프가 확실하게 시작되도록 보장
+            if (gameLoopId) cancelAnimationFrame(gameLoopId); 
+            lastTime = performance.now();
+            gameLoopId = requestAnimationFrame(gameLoop);
         }
 
         function showMessage(title, sub, showButton = true) { 
@@ -985,7 +980,6 @@
 
                 enemyPlayer.facing = dx > 0 ? 1 : -1;
                 
-                // ★ 버그 픽스: AI도 기 모으기 중 이동이 가능하도록 조건 완화
                 if(moveX !== 0 && enemyPlayer.state !== 'slide') {
                     let targetVx = moveX * 560 * enemyPlayer.speedMult;
                     enemyPlayer.vx += (targetVx - enemyPlayer.vx) * 12 * dt;
@@ -1001,7 +995,7 @@
                 enemyPlayer.vy = -750 * enemyPlayer.jumpMult; enemyPlayer.state = 'jump';
             }
 
-            if (Math.random() < 0.005) { 
+            if (Math.random() < 0.005 && enemyPlayer.state !== 'attack_windup') { 
                 let randomSkillIdx = Math.floor(Math.random() * 3);
                 let skillId = enemyPlayer.skills[randomSkillIdx];
                 if(skillId && enemyPlayer.cooldowns[randomSkillIdx] <= 0) {
@@ -1104,20 +1098,17 @@
                     if((myPlayer.distanceLock || enemyPlayer.distanceLock) && Math.abs(myPlayer.x - enemyPlayer.x) < 100) { if((myPlayer.x < enemyPlayer.x && moveX > 0) || (myPlayer.x > enemyPlayer.x && moveX < 0)) moveX = 0; }
                     let currentSpeedMult = gunReloading ? myPlayer.speedMult * 0.5 : myPlayer.speedMult; 
                     
-                    // ★ 버그 픽스: 플레이어가 공격 기 모으는 중일 때도 움직임 가능
                     if(moveX !== 0 && myPlayer.state !== 'slide') { 
                         let targetVx = moveX * 700 * currentSpeedMult;
                         myPlayer.vx += (targetVx - myPlayer.vx) * 12 * dt; 
                         myPlayer.facing = moveX; 
                     }
                     
-                    // ★ 점프도 기 모으는 중 가능
                     if((keys.w || keys.space) && myPlayer.y >= groundY - myPlayer.height) { 
                         myPlayer.vy = -700 * myPlayer.jumpMult; 
                         myPlayer.state = 'jump'; 
                     }
                     
-                    // ★ 대쉬 및 기타 모션도 가능
                     if((keys.s || mouse.rightClick) && myPlayer.state !== 'slide') { 
                         if(!gunReloading) { 
                             myPlayer.state = 'slide'; myPlayer.stateTimer = 0.2; myPlayer.invul = true; myPlayer.vy = 0; 
