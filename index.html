@@ -4,16 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Backstab Arena (Hardcore Parry)</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Socket.io 연동 스크립트 -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #0f172a; color: white; touch-action: none; font-family: 'Segoe UI', sans-serif; }
         #gameCanvas { display: block; }
         .pointer-events-auto { pointer-events: auto; }
         
-        /* ★ 시야 오버레이에 블러 트랜지션 추가 */
         #visionOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: backdrop-filter 0.3s, -webkit-backdrop-filter 0.3s, background 0.3s; z-index: 5; }
         #serverStatus { position: absolute; top: 10px; left: 10px; padding: 5px 10px; background: rgba(0,0,0,0.7); border-radius: 5px; font-size: 12px; z-index: 100; border: 1px solid rgba(255,255,255,0.2); }
         
@@ -39,11 +36,9 @@
 
     <div id="serverStatus" class="pointer-events-auto text-yellow-400 border border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]">서버 접속 시도 중...</div>
 
-    <!-- 캔버스 (게임 화면) -->
     <canvas id="gameCanvas"></canvas>
     <div id="visionOverlay"></div>
 
-    <!-- ★ 로그인 화면 -->
     <div id="loginScreen" class="ui-layer pointer-events-auto fade-in flex flex-col justify-center items-center" style="background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%); z-index: 45;">
         <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500 mb-8 tracking-widest text-center drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">
             BACKSTAB<br><span class="text-4xl text-white drop-shadow-none">ARENA</span>
@@ -64,7 +59,6 @@
         </div>
     </div>
 
-    <!-- ★ 로비 화면 -->
     <div id="lobbyScreen" class="ui-layer pointer-events-auto fade-in">
         <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500 mb-8 tracking-widest text-center drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">
             BACKSTAB<br><span class="text-4xl text-white drop-shadow-none">ARENA</span>
@@ -101,7 +95,6 @@
         </p>
     </div>
 
-    <!-- 뽑기 화면 -->
     <div id="gachaScreen" class="ui-layer pointer-events-auto fade-in">
         <h2 class="text-4xl font-bold mb-4 text-white drop-shadow-md">기술 뽑기</h2>
         <p class="mb-8 text-lg">1회 비용: <span class="text-yellow-400 font-bold">1</span> 재화</p>
@@ -114,7 +107,6 @@
         </div>
     </div>
 
-    <!-- 스킬 강화소 화면 -->
     <div id="upgradeScreen" class="ui-layer pointer-events-auto p-8 fade-in overflow-y-auto">
         <h2 class="text-4xl font-bold mb-2 text-orange-400 drop-shadow-md">스킬 강화소</h2>
         <p class="mb-8 text-gray-300">중복으로 획득한 스킬 조각을 모아 스킬의 한계를 돌파하세요!<br><span class="text-sm text-gray-500">(Lv.2 필요 조각: 1개 / Lv.3 필요 조각: 2개)</span></p>
@@ -122,7 +114,6 @@
         <button onclick="hideUpgrade()" class="mt-8 bg-gray-600 hover:bg-gray-700 py-3 px-10 rounded-lg font-bold text-xl shadow-lg transition">로비로 돌아가기</button>
     </div>
 
-    <!-- 기술 장착 화면 -->
     <div id="equipScreen" class="ui-layer pointer-events-auto p-8 fade-in overflow-y-auto">
         <h2 class="text-4xl font-bold mb-8 drop-shadow-md">기술 장착</h2>
         <div class="w-full max-w-3xl">
@@ -134,14 +125,12 @@
         <button onclick="hideEquip()" class="mt-8 bg-gray-600 hover:bg-gray-700 py-3 px-10 rounded-lg font-bold text-xl shadow-lg transition">저장 및 돌아가기</button>
     </div>
 
-    <!-- 대기 화면 -->
     <div id="waitingScreen" class="ui-layer pointer-events-auto">
         <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-red-500 mb-4"></div>
         <h2 class="text-3xl font-bold text-white drop-shadow-md">상대방을 기다리는 중...</h2>
         <p class="text-gray-400 mt-2 text-lg">새 창을 열거나 친구를 초대하세요!</p>
     </div>
 
-    <!-- 인게임 UI -->
     <div id="inGameUI" class="ui-layer">
         
         <div class="absolute top-4 left-0 w-full px-4 md:px-10 flex justify-between items-start pointer-events-auto">
@@ -196,7 +185,6 @@
 
     </div>
 
-    <!-- 메시지 및 결과 오버레이 -->
     <div id="messageOverlay" class="ui-layer pointer-events-auto">
         <div class="text-center">
             <h1 id="messageTitle" class="text-7xl font-bold mb-4 text-white drop-shadow-[0_0_20px_rgba(0,0,0,1)]"></h1>
@@ -374,6 +362,8 @@
                         enemyPlayer.reloadTimer = data.reloadTimer; enemyPlayer.reloadType = data.reloadType;
                         
                         if(data.snareTimer !== undefined) enemyPlayer.snareTimer = data.snareTimer;
+                        // ★ 서버를 통한 적의 침묵 상태 동기화
+                        if(data.silenced !== undefined) enemyPlayer.silenced = data.silenced; 
                         if(data.stateTimer !== undefined) enemyPlayer.stateTimer = data.stateTimer;
                         
                         if(data.meleeCooldown) enemyPlayer.meleeCooldown = data.meleeCooldown; 
@@ -416,7 +406,12 @@
                 
                 this.invul = false; this.godMode = false;
                 this.speedMult = 1.0; this.jumpMult = 1.0;
-                this.silenced = false; this.distanceLock = false;
+                
+                // ★ 침묵(silence) 관련 변수 추가
+                this.silenced = false; 
+                this.silenceTimer = 0; 
+                
+                this.distanceLock = false;
                 this.healTick = 0; this.revive = false;
                 
                 this.snareTimer = 0;
@@ -487,6 +482,15 @@
                     if (this.snareTimer < 0) this.snareTimer = 0;
                 }
                 
+                // ★ 침묵 지속시간 차감 로직
+                if (this.silenceTimer > 0) {
+                    this.silenceTimer -= dt;
+                    if (this.silenceTimer <= 0) {
+                        this.silenceTimer = 0;
+                        this.silenced = false;
+                    }
+                }
+                
                 if (this.state === 'attack_windup') {
                     this.stateTimer -= dt;
 
@@ -516,12 +520,10 @@
                             if( hitX < enemy.x + enemy.width && hitX + reach > enemy.x && this.y < enemy.y + enemy.height && this.y + this.height > enemy.y) {
                                 if(!enemy.invul && !enemy.godMode) {
                                     if (this.facing === enemy.facing) {
-                                        // ★ 등 공격 최소 데미지(15) 보장 및 현재 체력 비례
                                         enemy.applyDamage(Math.max(15, enemy.hp * 0.5));
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ef4444', 30);
                                     } else {
                                         enemy.vx = this.facing * 1200;
-                                        // ★ 평타 데미지 절반으로 하향 (30 -> 15)
                                         enemy.applyDamage(15); 
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#60a5fa', 15);
                                     }
@@ -846,7 +848,6 @@
                 } else { document.getElementById(`skillName${i+1}`).innerText = '-'; document.getElementById(`skillLv${i+1}`).innerText = ''; document.getElementById(`skillUI${i+1}`).style.borderColor = '#4b5563'; } 
             }
 
-            // ★ 라운드 시작 시 화면 블러 및 붉은 효과 완벽 초기화 (시야 감소 버그 수정)
             document.getElementById('visionOverlay').style.backdropFilter = 'none';
             document.getElementById('visionOverlay').style.webkitBackdropFilter = 'none';
             document.getElementById('visionOverlay').style.background = 'none';
@@ -963,7 +964,10 @@
                     break;
                 case 'front_tp': caster.x = target.x - (target.facing * 60); caster.facing = target.facing; createParticles(caster.x, caster.y+40, '#ffffff', 20); break;
                 case 'distance': caster.distanceLock = true; target.distanceLock = true; setTimeout(() => { caster.distanceLock = false; target.distanceLock = false; }, 2000 + lv*1000); break;
-                case 'purify': caster.silenced = false; caster.speedMult = Math.max(1.0, caster.speedMult); createParticles(caster.x, caster.y, '#ffffff', 30); break;
+                case 'purify': 
+                    // ★ 해방 시 침묵 상태 및 타이머 초기화
+                    caster.silenced = false; caster.silenceTimer = 0; 
+                    caster.speedMult = Math.max(1.0, caster.speedMult); createParticles(caster.x, caster.y, '#ffffff', 30); break;
                 case 'heal': caster.healTick = 2.0 + lv*1.0; caster.revive = true; break;
                 case 'gun': if(caster.gunActive) { caster.gunActive = false; caster.reloadTimer = 0; } else { caster.gunActive = true; caster.awpActive = false; caster.gunClip = 6 + (lv-1)*2; caster.reloadTimer = 0; } break; 
                 case 'awp': caster.awpActive = true; caster.gunActive = false; caster.awpClip = 5 + (lv-1); caster.reloadTimer = 0; break; 
@@ -973,7 +977,7 @@
                 case 'mine': entities.push({ x: caster.x + caster.width/2 - 15, y: groundY - 10, width: 30 + (lv-1)*10, height: 10, owner: caster, type: 'mine', level: lv }); break;
                 case 'deathnote': if(target === myPlayer || isAiMode) target.applyDamage(40 + lv*20); createParticles(target.x, target.y, '#000000', 40); break;
                 case 'roar': 
-                    caster.silenced = false; 
+                    caster.silenced = false; caster.silenceTimer = 0; // 호령 사용 시 침묵 해제
                     caster.speedMult += 0.3; 
                     caster.jumpMult += 0.3; 
                     setTimeout(() => { caster.jumpMult -= 0.3; }, 6000);
@@ -1053,7 +1057,8 @@
                 enemyPlayer.state = 'jump';
             }
 
-            if (Math.random() < 0.005 && enemyPlayer.state !== 'attack_windup') { 
+            // ★ AI 스킬 사용 시 침묵 상태(!enemyPlayer.silenced) 확인 추가
+            if (Math.random() < 0.005 && enemyPlayer.state !== 'attack_windup' && !enemyPlayer.silenced) { 
                 let randomSkillIdx = Math.floor(Math.random() * 3);
                 let skillId = enemyPlayer.skills[randomSkillIdx];
                 if(skillId && enemyPlayer.cooldowns[randomSkillIdx] <= 0) {
@@ -1181,7 +1186,7 @@
             if(myPlayer) myPlayer.update(dt); if(enemyPlayer) enemyPlayer.update(dt);
 
             if(!isAiMode && socket && socket.connected && gameState === 'playing') {
-                socket.emit('playerState', { x: myPlayer.x, y: myPlayer.y, state: myPlayer.state, facing: myPlayer.facing, hp: myPlayer.hp, invul: myPlayer.invul, skills: myPlayer.skills, skillLevels: myPlayer.skillLevels, lastAction: myPlayer.lastAction, gunActive: myPlayer.gunActive, awpActive: myPlayer.awpActive, reloadTimer: myPlayer.reloadTimer, reloadType: myPlayer.reloadType, meleeCooldown: myPlayer.meleeCooldown, snareTimer: myPlayer.snareTimer });
+                socket.emit('playerState', { x: myPlayer.x, y: myPlayer.y, state: myPlayer.state, facing: myPlayer.facing, hp: myPlayer.hp, invul: myPlayer.invul, skills: myPlayer.skills, skillLevels: myPlayer.skillLevels, lastAction: myPlayer.lastAction, gunActive: myPlayer.gunActive, awpActive: myPlayer.awpActive, reloadTimer: myPlayer.reloadTimer, reloadType: myPlayer.reloadType, meleeCooldown: myPlayer.meleeCooldown, snareTimer: myPlayer.snareTimer, silenced: myPlayer.silenced });
             }
 
             for(let i=projectiles.length-1; i>=0; i--) {
@@ -1204,7 +1209,8 @@
                         let lv = p.level || 1;
                         if(p.type === 'slow') target.speedMult = 0.6 - (lv*0.1); 
                         else if(p.type === 'snare') { target.snareTimer = 1.0 + (lv*0.5); target.vx = 0; }
-                        else if(p.type === 'silence') target.silenced = true; 
+                        // ★ 침묵 피격 시, 상태를 true로 만들고 5초 타이머 부여
+                        else if(p.type === 'silence') { target.silenced = true; target.silenceTimer = 5.0; } 
                         else if(p.type === 'bomb') target.applyDamage(10 + lv*5);
                         else if(p.type === 'awp') { target.applyDamage(25 + lv*10); target.vx = target.facing === 1 ? -500 : 500; } 
                         else if(p.type === 'gun') { target.applyDamage(3 + lv*1); target.vx = 0; }
