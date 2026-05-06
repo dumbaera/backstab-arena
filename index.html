@@ -459,7 +459,6 @@
                 if(this === myPlayer) {
                     const overlay = document.getElementById('visionOverlay');
                     if(hpRatio < 0.5) { 
-                        // ★ 블러 및 붉은색 강도를 완화
                         let blurPx = (0.5 - hpRatio) * 6; 
                         overlay.style.backdropFilter = `blur(${blurPx}px)`;
                         overlay.style.webkitBackdropFilter = `blur(${blurPx}px)`;
@@ -494,7 +493,6 @@
                     let enemy = this === myPlayer ? enemyPlayer : myPlayer;
                     if (isAiMode && this === enemyPlayer) enemy = myPlayer;
 
-                    // ★ 패링(완벽한 회피) 구간을 남은 시간 0.1초 이하일 때로 타이트하게 조정
                     if (this.stateTimer <= 0.1 && this.stateTimer > 0) {
                         if (enemy && enemy.state === 'slide') { 
                             let reach = 50; 
@@ -518,11 +516,13 @@
                             if( hitX < enemy.x + enemy.width && hitX + reach > enemy.x && this.y < enemy.y + enemy.height && this.y + this.height > enemy.y) {
                                 if(!enemy.invul && !enemy.godMode) {
                                     if (this.facing === enemy.facing) {
-                                        enemy.applyDamage(Math.max(30, enemy.hp * 0.5));
+                                        // ★ 등 공격 최소 데미지(15) 보장 및 현재 체력 비례
+                                        enemy.applyDamage(Math.max(15, enemy.hp * 0.5));
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#ef4444', 30);
                                     } else {
                                         enemy.vx = this.facing * 1200;
-                                        enemy.applyDamage(30); 
+                                        // ★ 평타 데미지 절반으로 하향 (30 -> 15)
+                                        enemy.applyDamage(15); 
                                         createParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#60a5fa', 15);
                                     }
                                 }
@@ -1018,7 +1018,6 @@
 
             if (isMelee) {
                 attacker.meleeCooldown = 1.0; 
-                // ★ 평타 딜레이 0.2초로 수정
                 attacker.state = 'attack_windup';
                 attacker.stateTimer = 0.2;
             }
@@ -1147,7 +1146,7 @@
                 let gunReloading = (myPlayer.reloadType === 'gun' && myPlayer.reloadTimer > 0);
 
                 if (myPlayer.snareTimer > 0 && !isImmobile) {
-                    if(mouse.click && myPlayer.state !== 'slide') { 
+                    if(mouse.click && myPlayer.state !== 'slide' && myPlayer.state !== 'attack_windup') { 
                         executeAttack(myPlayer); mouse.click = false; 
                     }
                 } 
@@ -1196,7 +1195,7 @@
                         let isGun = p.type === 'gun' || p.type === 'awp';
                         let projFacing = p.vx > 0 ? 1 : -1;
                         if (isGun && projFacing === target.facing) {
-                            target.applyDamage(target.hp * 0.5);
+                            target.applyDamage(Math.max(15, target.hp * 0.5));
                             createParticles(target.x + target.width/2, target.y + target.height/2, '#ef4444', 30);
                             projectiles.splice(i, 1);
                             continue;
@@ -1259,7 +1258,6 @@
                 }
                 document.getElementById(`skillCool${i+1}`).style.height = `${cdRatio * 100}%`; 
                 
-                // ★ 스킬 쿨타임 남은 시간 텍스트 표시
                 let cdTextEl = document.getElementById(`skillCdText${i+1}`);
                 if (remainingCd > 0 && skillId !== 'gun') {
                     cdTextEl.style.display = 'flex';
